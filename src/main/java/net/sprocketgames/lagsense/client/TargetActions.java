@@ -35,7 +35,7 @@ final class TargetActions {
         if(!canTravel(destination))return;var target=destination.target();boolean entity=target.kind().equals("Entity");
         boolean currentLocation=false;
         if(entity){var current=live(target);if(current!=null){var pos=current.blockPosition();var resolved=ComparisonTargets.current(target,new ComparisonTargets.Live(current.level().dimension().identifier().toString(),net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(current.getType()).toString(),pos.getX(),pos.getY(),pos.getZ(),current.isRemoved()));if(resolved!=null){target=resolved;currentLocation=true;}}}
-        var mc=Minecraft.getInstance();mc.setScreen(new TravelScreen(parent,target,()->{if(canTravel(destination))mc.player.connection.sendCommand("lagsense "+(destination.chunk()?"tpchunk":"tp")+" "+destination.capture()+" "+destination.index());},currentLocation?"Current entity location":"Recorded location"));
+        var mc=Minecraft.getInstance();mc.gui.setScreen(new TravelScreen(parent,target,()->{if(canTravel(destination))mc.player.connection.sendCommand("lagsense "+(destination.chunk()?"tpchunk":"tp")+" "+destination.capture()+" "+destination.index());},currentLocation?"Current entity location":"Recorded location"));
     }
     private TargetActions(){}
 }

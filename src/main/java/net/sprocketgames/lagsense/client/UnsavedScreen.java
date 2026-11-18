@@ -19,5 +19,5 @@ public final class UnsavedScreen extends LagScreen {
     }
     @Override protected void setInitialFocus(){setInitialFocus(keepEditing);}
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float a){canvas(g,"UNSAVED CHANGES");headerDivider(g);text(g,"Apply changes before leaving?",margin(),panelTop()+52,contentWidth(),UiTheme.TEXT);super.extractRenderState(g,mx,my,a);}
-    @Override public void onClose(){minecraft.setScreen(editor);}
+    @Override public void onClose(){minecraft.gui.setScreen(editor);}
 }

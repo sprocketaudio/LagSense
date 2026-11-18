@@ -19,8 +19,8 @@ public final class FullReports {
         try{reader.execute(()->{
             try{var report=FullReportWire.decode(bytes);var markers=new MarkerIndex(report);
                 Minecraft.getInstance().execute(()->{if(generation==epoch&&token==assembly.serial())LagSenseClient.acceptReport(report,show,saved,markers,true);});
-            }catch(Exception error){Minecraft.getInstance().execute(()->{if(generation==epoch&&token==assembly.serial()){if(show)ClientAccess.failReportLoad();if(Minecraft.getInstance().player!=null)Minecraft.getInstance().getChatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("Could not read the complete LagSense report. Open it again to retry."),false);}});}
-        });}catch(RejectedExecutionException error){if(show)ClientAccess.failReportLoad();if(Minecraft.getInstance().player!=null)Minecraft.getInstance().getChatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("LagSense report decoding is busy. Open the report again shortly."),false);}
+            }catch(Exception error){Minecraft.getInstance().execute(()->{if(generation==epoch&&token==assembly.serial()){if(show)ClientAccess.failReportLoad();if(Minecraft.getInstance().player!=null)Minecraft.getInstance().gui.chatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("Could not read the complete LagSense report. Open it again to retry."),false);}});}
+        });}catch(RejectedExecutionException error){if(show)ClientAccess.failReportLoad();if(Minecraft.getInstance().player!=null)Minecraft.getInstance().gui.chatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("LagSense report decoding is busy. Open the report again shortly."),false);}
     }
     private FullReports(){}
 }

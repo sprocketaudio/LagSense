@@ -66,7 +66,7 @@ public final class HeatmapScreen extends LagScreen {
         controls.toggle("World",64,LagSenseClient.settings.chunkHeatmap,()->{LagSenseClient.settings.chunkHeatmap=!LagSenseClient.settings.chunkHeatmap;LagSenseClient.settings.save();rebuildWidgets();});
         mapTop=controls.finish()+8;if(selectingMod)results(mapTop,selector(mapTop).entries,true);else clearResults();
         UiHints.hint(action("Copy",margin(),footer(),44,()->{if(ClientAccess.allowed(report))minecraft.keyboardHandler.setClipboard(Profiler.JSON.toJson(report));}),"Copy this report as JSON.");
-        action("Export",margin()+48,footer(),48,()->minecraft.setScreen(new ExportScreen(this,report,archived)));
+        action("Export",margin()+48,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,report,archived)));
         if(archived){
             var destination=selectedDestination();
             if(destination!=null){var actions=TargetActions.actions(this,destination);int x=margin()+100;for(var item:actions){var button=action(item.label(),x,footer(),item.label().equals("Mark")?48:36,item.run()).enabledWhen(item.enabled()).visibleWhen(item.visible()==null?()->true:item.visible());if(item.mark()!=null)button.markState(item.mark());x+=item.label().equals("Mark")?52:40;}}
@@ -86,7 +86,7 @@ public final class HeatmapScreen extends LagScreen {
     @Override public boolean mouseClicked(MouseButtonEvent e,boolean twice){if(super.mouseClicked(e,twice))return true;if(!selectingMod&&e.button()==0&&viewport().contains(e.x(),e.y())){gesture.begin(e.x(),e.y());return true;}return false;}
     @Override public boolean mouseDragged(MouseButtonEvent e,double dx,double dy){if(e.button()==0&&gesture.pressed()){var shift=gesture.drag(e.x(),e.y());centerX-=shift.x()/cell;centerZ-=shift.y()/cell;return true;}return super.mouseDragged(e,dx,dy);}
     @Override public boolean mouseReleased(MouseButtonEvent e){
-        if(e.button()==0&&gesture.pressed()){boolean click=gesture.release();if(click&&viewport().contains(e.x(),e.y())){var hit=map().at(e.x(),e.y());selected=hit==null?null:find(hit.x(),hit.z());if(selected!=null){if(owner==null)Investigations.chunk(this,report,archived,dimension,selected.x(),selected.z());else minecraft.setScreen(new ChunkScreen(this,report,archived,data.chunk(dimension,selected.x(),selected.z())));}else rebuildWidgets();}return true;}return super.mouseReleased(e);
+        if(e.button()==0&&gesture.pressed()){boolean click=gesture.release();if(click&&viewport().contains(e.x(),e.y())){var hit=map().at(e.x(),e.y());selected=hit==null?null:find(hit.x(),hit.z());if(selected!=null){if(owner==null)Investigations.chunk(this,report,archived,dimension,selected.x(),selected.z());else minecraft.gui.setScreen(new ChunkScreen(this,report,archived,data.chunk(dimension,selected.x(),selected.z())));}else rebuildWidgets();}return true;}return super.mouseReleased(e);
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial){
         if(profileNavigation!=null)profileNavigation.render(this,g,mx,my);else{canvas(g,"CHUNK HEATMAP");text(g,"North (−Z)",margin(),panelTop()+25,contentWidth(),UiTheme.SECONDARY);headerDivider(g);}
@@ -101,6 +101,6 @@ public final class HeatmapScreen extends LagScreen {
     }
     private void fit(){var values=relevant();if(values.isEmpty())return;int minX=values.stream().mapToInt(Report.Chunk::x).min().orElse(0),maxX=values.stream().mapToInt(Report.Chunk::x).max().orElse(0),minZ=values.stream().mapToInt(Report.Chunk::z).min().orElse(0),maxZ=values.stream().mapToInt(Report.Chunk::z).max().orElse(0);centerX=((long)minX+maxX+1)/2.0;centerZ=((long)minZ+maxZ+1)/2.0;var area=viewport();cell=Math.max(2,Math.min(34,(int)Math.min(area.width()/Math.max(1L,(long)maxX-minX+3),area.height()/Math.max(1L,(long)maxZ-minZ+3))));zoomScroll=0;}
     private void outline(GuiGraphicsExtractor g,HeatmapPlan view,int x,int z,int color){int rx=view.column(x),rz=view.row(z);if(rx>=0&&rz>=0)UiTheme.border(g,view.pixelX(rx),view.pixelY(rz),cell-1,cell-1,color);}
-    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.setScreen(parent);}
+    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.gui.setScreen(parent);}
     @Override public void removed(){gesture.cancel();releaseTexture();super.removed();}
 }

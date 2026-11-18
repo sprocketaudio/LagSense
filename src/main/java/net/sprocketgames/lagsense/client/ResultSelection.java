@@ -29,5 +29,5 @@ final class ResultSelection {
         if(source==null||busy)return;CopyTree.Node node;try{node=source.get();}catch(RuntimeException failure){error("Could not read selected result.");return;}if(node==null){clear();return;}long token=generation,access=ClientAccess.epoch();waiting(true);
         try{writer.execute(()->{try{String text=CopyTree.format(node,warning);Minecraft.getInstance().execute(()->{if(!current(token)||!ClientAccess.current(access))return;waiting(false);Minecraft.getInstance().keyboardHandler.setClipboard(text);});}catch(Exception failure){Minecraft.getInstance().execute(()->{if(current(token)){waiting(false);error("Could not copy selected result.");}});}});}catch(RejectedExecutionException busy){waiting(false);error("Clipboard copy is busy. Try again shortly.");}
     }
-    private static void error(String text){var mc=Minecraft.getInstance();if(mc.player!=null)mc.getChatListener().handleSystemMessage(Component.literal(text),false);}
+    private static void error(String text){var mc=Minecraft.getInstance();if(mc.player!=null)mc.gui.chatListener().handleSystemMessage(Component.literal(text),false);}
 }

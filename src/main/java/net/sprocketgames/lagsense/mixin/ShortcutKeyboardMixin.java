@@ -1,6 +1,7 @@
 package net.sprocketgames.lagsense.mixin;
 import net.sprocketgames.lagsense.client.ShortcutBindings;
 import com.llamalad7.mixinextras.injector.wrapoperation.*;
+import com.mojang.blaze3d.platform.InputConstants;
 import net.minecraft.client.*;
 import net.minecraft.client.input.KeyEvent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -11,9 +12,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class ShortcutKeyboardMixin {
     @Inject(method="keyPress",at=@At("HEAD"))
     private void lagsense$press(long window,int action,KeyEvent event,CallbackInfo callback){ShortcutBindings.key(window,action,event);}
-    @WrapOperation(method="keyPress",at=@At(value="INVOKE",target="Lnet/minecraft/client/KeyMapping;matches(Lnet/minecraft/client/input/KeyEvent;)Z"))
-    private boolean lagsense$globalKey(KeyMapping mapping,KeyEvent event,Operation<Boolean> original){
-        boolean matches=original.call(mapping,event);var mc=Minecraft.getInstance();
-        return matches&&!(mc.options!=null&&(mapping==mc.options.keyFullscreen||mapping==mc.options.keyScreenshot)&&ShortcutBindings.claimsModified(event));
+    @WrapOperation(method="keyPress",at=@At(value="INVOKE",target="Lnet/minecraft/client/Minecraft;handleGlobalKeyPress(Lcom/mojang/blaze3d/platform/InputConstants$Key;Z)Z"))
+    private boolean lagsense$globalKey(Minecraft mc,InputConstants.Key key,boolean controlDown,Operation<Boolean> original){
+        if ((mc.options.keyFullscreen.matches(key)||mc.options.keyScreenshot.matches(key))&&ShortcutBindings.claimsModified(key)) return false;
+        return original.call(mc,key,controlDown);
     }
 }

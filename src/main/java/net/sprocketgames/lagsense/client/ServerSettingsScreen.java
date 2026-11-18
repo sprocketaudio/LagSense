@@ -24,20 +24,20 @@ public final class ServerSettingsScreen extends SettingsPage {
         var mc=Minecraft.getInstance();
         if(mc.player==null||mc.getConnection()==null)return;
         if(!NetworkRegistry.hasChannel(mc.getConnection(),ServerSettingsRequest.TYPE.id())) {
-            mc.getChatListener().handleSystemMessage(Component.literal("Update LagSense on the server to edit these settings."),false);return;
+            mc.gui.chatListener().handleSystemMessage(Component.literal("Update LagSense on the server to edit these settings."),false);return;
         }
         ClientPacketDistributor.sendToServer(new ServerSettingsRequest(section,""));
     }
     public static void accept(ServerSettingsPayload packet) {
         var mc=Minecraft.getInstance();
         if(packet.json().isEmpty()) {
-            if(mc.screen instanceof ServerSettingsScreen screen){screen.waiting=false;screen.denied=true;screen.message=packet.message();screen.rebuildWidgets();}
-            else if(mc.player!=null)mc.getChatListener().handleSystemMessage(Component.literal(packet.message()),false);
+            if(mc.gui.screen() instanceof ServerSettingsScreen screen){screen.waiting=false;screen.denied=true;screen.message=packet.message();screen.rebuildWidgets();}
+            else if(mc.player!=null)mc.gui.chatListener().handleSystemMessage(Component.literal(packet.message()),false);
             return;
         }
         var view=Profiler.JSON.fromJson(packet.json(),ServerSettingsForms.View.class);
-        if(mc.screen instanceof ServerSettingsScreen screen&&screen.section.equals(packet.section()))screen.accept(view,packet.message(),packet.saved());
-        else mc.setScreen(new ServerSettingsScreen(mc.screen,packet.section(),view,packet.message()));
+        if(mc.gui.screen() instanceof ServerSettingsScreen screen&&screen.section.equals(packet.section()))screen.accept(view,packet.message(),packet.saved());
+        else mc.gui.setScreen(new ServerSettingsScreen(mc.gui.screen(),packet.section(),view,packet.message()));
     }
     private ServerSettingsScreen(Screen parent,String section,ServerSettingsForms.View view,String message) {
         super(section.equals("discord")?"Discord notifications":"Advanced");this.parent=parent;this.section=section;expected=view;this.message=message;load(view);
@@ -167,7 +167,7 @@ public final class ServerSettingsScreen extends SettingsPage {
     }
     private void accept(ServerSettingsForms.View view,String message,boolean saved) {
         waiting=false;this.message=message;
-        if(saved){expected=view;load(view);if(closeAfterApply){minecraft.setScreen(parent);return;}}
+        if(saved){expected=view;load(view);if(closeAfterApply){minecraft.gui.setScreen(parent);return;}}
         closeAfterApply=false;rebuildWidgets();
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float a) {
@@ -179,7 +179,7 @@ public final class ServerSettingsScreen extends SettingsPage {
     }
     @Override public void onClose() {
         if(waiting)return;
-        if(dirty&&!denied)minecraft.setScreen(new UnsavedScreen(this,()->minecraft.setScreen(parent),()->{minecraft.setScreen(this);closeAfterApply=true;apply();}));
-        else minecraft.setScreen(parent);
+        if(dirty&&!denied)minecraft.gui.setScreen(new UnsavedScreen(this,()->minecraft.gui.setScreen(parent),()->{minecraft.gui.setScreen(this);closeAfterApply=true;apply();}));
+        else minecraft.gui.setScreen(parent);
     }
 }

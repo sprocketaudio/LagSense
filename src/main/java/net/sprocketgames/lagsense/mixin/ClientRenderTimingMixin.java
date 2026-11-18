@@ -15,13 +15,13 @@ abstract class ClientRenderTimingMixin {
         long start = System.nanoTime(); try { original.call(delta, advance); } finally { ClientFrames.stage("Frame preparation", System.nanoTime() - start); }
     }
     @WrapMethod(method = "render")
-    private void lagsense$render(DeltaTracker delta, boolean advance, Operation<Void> original) {
-        if (!ClientFrames.active) { original.call(delta, advance); return; }
-        long start = System.nanoTime(); try { original.call(delta, advance); } finally { ClientFrames.stage("Render submission", System.nanoTime() - start); }
+    private void lagsense$render(Operation<Void> original) {
+        if (!ClientFrames.active) { original.call(); return; }
+        long start = System.nanoTime(); try { original.call(); } finally { ClientFrames.stage("Render submission", System.nanoTime() - start); }
     }
     @WrapMethod(method = "renderLevel")
-    private void lagsense$world(DeltaTracker delta, Operation<Void> original) {
-        if (!ClientFrames.active) { original.call(delta); return; }
-        long start = System.nanoTime(); try { original.call(delta); } finally { ClientFrames.stage("World submission", System.nanoTime() - start); }
+    private void lagsense$world(Operation<Void> original) {
+        if (!ClientFrames.active) { original.call(); return; }
+        long start = System.nanoTime(); try { original.call(); } finally { ClientFrames.stage("World submission", System.nanoTime() - start); }
     }
 }

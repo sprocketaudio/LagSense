@@ -48,7 +48,7 @@ public final class FpsScreen extends LagScreen {
         toggle("GPU", new UiMetrics.Rect(x + 180, 60, 74, 20), ClientFrames.gpuEnabled(), () -> { ClientFrames.toggleGpu(); rebuildWidgets(); });
         if (ClientFrames.latest != null) {
             UiHints.hint(action("Copy", x, footer(), 44, () -> minecraft.keyboardHandler.setClipboard(Profiler.JSON.toJson(ClientFrames.latest))),"Copy this report as JSON.");
-            action("Export", x + 48, footer(), 48, () -> minecraft.setScreen(new ExportScreen(this, ClientFrames.latest)));
+            action("Export", x + 48, footer(), 48, () -> minecraft.gui.setScreen(new ExportScreen(this, ClientFrames.latest)));
         }
         action("Close", width - x - 54, footer(), 54, this::onClose);
     }
@@ -76,5 +76,5 @@ public final class FpsScreen extends LagScreen {
         }
         super.extractRenderState(g, mx, my, partial);
     }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
 }

@@ -1,7 +1,7 @@
 package net.sprocketgames.lagsense.client;
 
-import com.mojang.blaze3d.pipeline.RenderPipeline;
-import com.mojang.blaze3d.textures.GpuTextureView;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
+import com.mojang.renderpearl.api.textures.GpuTextureView;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -44,7 +44,6 @@ public final class UiFont extends Font {
         @Override public net.minecraft.network.chat.Style style() { return nativeGlyph.style(); }
         @Override public void render(Matrix4fc pose, VertexConsumer buffer, int light, boolean flat) { nativeGlyph.render(pose, buffer, light, flat); }
         @Override public RenderType renderType(DisplayMode mode) { return nativeGlyph.renderType(mode); }
-        @Override public RenderType renderType(DisplayMode mode, boolean blur) { return nativeGlyph.renderType(mode, blur); }
         @Override public GpuTextureView textureView() { return nativeGlyph.textureView(); }
         @Override public RenderPipeline guiPipeline() { return nativeGlyph.guiPipeline(); }
         @Override public float left() { return nativeGlyph.left(); }

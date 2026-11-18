@@ -63,7 +63,7 @@ final class ChunkBranches {
     boolean open(Report.Chunk chunk){return state(key(chunk)).open;}
     void toggle(Report.Chunk chunk){var key=key(chunk);var state=state(key);state.open=!state.open;if(state.open&&state.data==null)load(key,state);screen.rebuildResults();}
     void start(String dimension,int x,int z){var key=new Key(dimension,x,z);var state=state(key);state.open=true;if(state.data==null)load(key,state);}
-    private void changed(){if(net.minecraft.client.Minecraft.getInstance().screen==screen)screen.rebuildResults();}
+    private void changed(){if(net.minecraft.client.Minecraft.getInstance().gui.screen()==screen)screen.rebuildResults();}
     private void load(Key key,Chunk state){
         if(state.loading)return;state.loading=true;state.error="";
         var scoped=ClientAccess.markers(report);if(!report.admin()&&scoped!=null){received(state,scoped.chunk(key.dimension(),key.x(),key.z()));return;}
@@ -106,7 +106,7 @@ final class ChunkBranches {
         }
         ready.run();
     }
-    private void copyFailed(Chunk chunk,String error){chunk.loading=false;chunk.error=error;screen.selection.waiting(false);var mc=net.minecraft.client.Minecraft.getInstance();if(mc.player!=null)mc.getChatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("Could not copy contributors: "+error),false);}
+    private void copyFailed(Chunk chunk,String error){chunk.loading=false;chunk.error=error;screen.selection.waiting(false);var mc=net.minecraft.client.Minecraft.getInstance();if(mc.player!=null)mc.gui.chatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal("Could not copy contributors: "+error),false);}
     private CopyTree.Node categoryCopy(Key key,String kind){return new ResultText(ModNames::name).category(snapshot(key.dimension(),key.x(),key.z()),kind,byCount,byType,byMod);}
     private CopyTree.Node modCopy(Key key,String kind,String owner){var data=snapshot(key.dimension(),key.x(),key.z());boolean count=byCount,types=byType;return CopyTree.deferred(owner,()->{var targets=ResultText.chunkTargets(data,kind,count);var group=ProfileResults.mods(targets,count,types).stream().filter(m->m.owner().equals(owner)).findFirst().orElseThrow();return new ResultText(ModNames::name).mod(group,data.ticks(),types);});}
     private CopyTree.Node typeCopy(Key key,String kind,String registry){var data=snapshot(key.dimension(),key.x(),key.z());boolean count=byCount;return CopyTree.deferred(registry,()->{var group=ProfileResults.groups(ResultText.chunkTargets(data,kind,count),count).stream().filter(g->g.type().registry().equals(registry)).findFirst().orElseThrow();return new ResultText(ModNames::name).type(group,data.ticks());});}

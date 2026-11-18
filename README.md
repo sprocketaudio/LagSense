@@ -11,9 +11,9 @@ visualisation to help locate and investigate performance problems.
 ### Help players investigate their own bases
 
 Players can inspect reports captured by server admins or automatic captures.
-Optional FTB Teams / FTB Chunks and Open Parties and Claims integrations restrict
-player results to their permitted claims. Admins can also define public profiling
-areas. Players cannot start server captures or change server settings.
+Open Parties and Claims can restrict player results to their permitted claims.
+Admins can also define public profiling areas. Players cannot start server
+captures or change server settings.
 
 ### Visualise lag directly in-game
 
@@ -71,12 +71,12 @@ Three UI themes and configurable HUD positioning are included.
 
 | Requirement | Version |
 | --- | --- |
-| Minecraft | 26.1.2 |
-| NeoForge | 26.1.2.121 or a compatible later 26.1.2 build |
+| Minecraft | 26.3 |
+| NeoForge | 26.3.0.113 or a compatible later 26.3 build |
 | Java | 25 |
-| Optional FTB Chunks | 26.1.2.9+; tested with 26.1.2.9 and 26.1.2.10 |
-| Optional FTB Teams | 26.1.2.5 |
-| Optional Open Parties and Claims | 0.33.0 |
+| Optional Open Parties and Claims | 0.33.0 for NeoForge 26.3 |
+
+For FTB Chunks and FTB Teams, use the Minecraft 26.1.2 build of LagSense.
 
 Install LagSense on the server for profiling and on clients for report screens
 and overlays. Use the same LagSense version on both sides. Single-player requires

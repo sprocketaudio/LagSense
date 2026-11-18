@@ -5,39 +5,38 @@ import com.mojang.blaze3d.platform.InputConstants;
 import java.util.*;
 import net.minecraft.client.KeyMapping;
 import net.neoforged.neoforge.client.settings.*;
-import org.lwjgl.glfw.GLFW;
 
 /** Native binding contracts and actual client-state/layout paths, without synthetic OS input. */
 final class ShortcutChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
-    private static InputConstants.Key key(int value){return InputConstants.Type.KEYSYM.getOrCreate(value);}
+    private static InputConstants.Key key(int value){return InputConstants.Type.KEYBOARD.getOrCreate(value);}
     static void run()throws Exception{
         var settings=LagSenseClient.settings;var report=LagSenseClient.report;var marker=LagSenseClient.markerIndex;var theme=UiTheme.current();
         var saved=new LinkedHashMap<KeyMapping,Map.Entry<KeyModifier,InputConstants.Key>>();
         ShortcutBindings.all().forEach(m->saved.put(m,Map.entry(m.getKeyModifier(),m.getKey())));
         try{
             var bindings=List.of(ShortcutBindings.REPORT,ShortcutBindings.CAPTURE,ShortcutBindings.SETTINGS,ShortcutBindings.VISIBILITY);
-            int[] keys={GLFW.GLFW_KEY_F9,GLFW.GLFW_KEY_F10,GLFW.GLFW_KEY_F11,GLFW.GLFW_KEY_F12};
+            int[] keys={InputConstants.KEY_F9,InputConstants.KEY_F10,InputConstants.KEY_F11,InputConstants.KEY_F12};
             check(ShortcutBindings.all().stream().map(KeyMapping::getName).distinct().count()==ShortcutBindings.all().size(),"No duplicate Controls entries");
             for(int i=0;i<bindings.size();i++){
                 var mapping=bindings.get(i);mapping.setToDefault();
                 check(mapping.getKeyModifier()==KeyModifier.CONTROL&&mapping.getKey().equals(key(keys[i])),"Each function key has the required Ctrl default");
                 check(mapping.getDefaultKeyModifier()==KeyModifier.CONTROL&&mapping.isDefault(),"Minecraft Reset restores the modifier too");
                 check(mapping.getKeyConflictContext().conflicts(KeyConflictContext.IN_GAME)&&mapping.getKeyConflictContext().conflicts(KeyConflictContext.UNIVERSAL),"Native in-game/global conflicts are declared");
-                mapping.setKeyModifierAndCode(KeyModifier.ALT,key(GLFW.GLFW_KEY_K+i));
+                mapping.setKeyModifierAndCode(KeyModifier.ALT,key(InputConstants.KEY_K+i));
                 check(mapping.getKeyModifier()==KeyModifier.ALT&&!mapping.isDefault()&&mapping.saveString().startsWith("key.keyboard."),"Native remapping and options serialization retain normal keys");
                 mapping.setToDefault();
                 ShortcutBindings.clear();
-                check(ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_PRESS),"First physical press is accepted");
-                check(!ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_REPEAT)&&!ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_PRESS),"Repeats and duplicate press callbacks do not toggle twice");
-                ShortcutBindings.pressEdge(key(GLFW.GLFW_KEY_LEFT_CONTROL),GLFW.GLFW_RELEASE);
-                check(!ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_PRESS),"Releasing Ctrl does not re-arm a held function key");
-                ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_RELEASE);
-                check(ShortcutBindings.pressEdge(key(keys[i]),GLFW.GLFW_PRESS),"Releasing the function key re-arms the shortcut");
+                check(ShortcutBindings.pressEdge(key(keys[i]),InputConstants.PRESS),"First physical press is accepted");
+                check(!ShortcutBindings.pressEdge(key(keys[i]),InputConstants.REPEAT)&&!ShortcutBindings.pressEdge(key(keys[i]),InputConstants.PRESS),"Repeats and duplicate press callbacks do not toggle twice");
+                ShortcutBindings.pressEdge(key(InputConstants.KEY_LCONTROL),InputConstants.RELEASE);
+                check(!ShortcutBindings.pressEdge(key(keys[i]),InputConstants.PRESS),"Releasing Ctrl does not re-arm a held function key");
+                ShortcutBindings.pressEdge(key(keys[i]),InputConstants.RELEASE);
+                check(ShortcutBindings.pressEdge(key(keys[i]),InputConstants.PRESS),"Releasing the function key re-arms the shortcut");
             }
             String hint=ShortcutBindings.hudHint();check(hint.contains(ShortcutBindings.hint(ShortcutBindings.REPORT).replace(" + ","+")+" Profiler")&&hint.contains(ShortcutBindings.hint(ShortcutBindings.VISIBILITY).replace(" + ","+")+" Toggle visuals")&&!hint.contains("settings"),"HUD hints show actions for profiler and master visibility, not Settings");
             String english=ShortcutBindings.hudHint("CTRL + F9","CTRL + F12");check(UiFonts.width(UiFonts.body(),english)<=222,"Default HUD shortcut hints fit the existing panel: "+UiFonts.width(UiFonts.body(),english));
-            ShortcutBindings.VISIBILITY.setKeyModifierAndCode(KeyModifier.ALT,key(GLFW.GLFW_KEY_V));check(ShortcutBindings.hudHint().contains(ShortcutBindings.hint(ShortcutBindings.VISIBILITY).replace(" + ","+")+" Toggle visuals"),"HUD visibility hint follows normal remapping");
+            ShortcutBindings.VISIBILITY.setKeyModifierAndCode(KeyModifier.ALT,key(InputConstants.KEY_V));check(ShortcutBindings.hudHint().contains(ShortcutBindings.hint(ShortcutBindings.VISIBILITY).replace(" + ","+")+" Toggle visuals"),"HUD visibility hint follows normal remapping");
             ShortcutBindings.VISIBILITY.setKeyModifierAndCode(KeyModifier.NONE,InputConstants.UNKNOWN);check(!ShortcutBindings.hudHint().contains("Toggle visuals")&&!ShortcutBindings.hudHint().endsWith(" | "),"Unbound visuals shortcut leaves no stale or dangling HUD hint");ShortcutBindings.VISIBILITY.setToDefault();
             ShortcutBindings.clear();
             for(var binding:bindings)ShortcutBindings.enqueue(List.of(binding));
@@ -46,19 +45,19 @@ final class ShortcutChecks {
             check(ShortcutBindings.takeActions().equals(List.of(ShortcutBindings.Action.SETTINGS,ShortcutBindings.Action.REPORT,ShortcutBindings.Action.REPORT)),"Distinct physical presses retain their order, even within one tick");
             ShortcutBindings.enqueue(List.of());check(ShortcutBindings.takeActions().isEmpty(),"No native modifier match means no action");
             check(!ShortcutBindings.REPORT.same(ShortcutBindings.SETTINGS),"Distinct default shortcuts do not conflict");
-            ShortcutBindings.SETTINGS.setKeyModifierAndCode(KeyModifier.CONTROL,key(GLFW.GLFW_KEY_F9));
+            ShortcutBindings.SETTINGS.setKeyModifierAndCode(KeyModifier.CONTROL,key(InputConstants.KEY_F9));
             check(ShortcutBindings.REPORT.same(ShortcutBindings.SETTINGS),"Minecraft reports a duplicate modified remap as a conflict");
-            ShortcutBindings.SETTINGS.setKeyModifierAndCode(KeyModifier.NONE,key(GLFW.GLFW_KEY_F9));
+            ShortcutBindings.SETTINGS.setKeyModifierAndCode(KeyModifier.NONE,key(InputConstants.KEY_F9));
             check(ShortcutBindings.REPORT.same(ShortcutBindings.SETTINGS),"Minecraft's in-game conflict rules include the unmodified key");ShortcutBindings.SETTINGS.setToDefault();
             ShortcutBindings.FPS.setToDefault();check(ShortcutBindings.FPS.isUnbound(),"Optional frame profiling has no leftover F7 default");
-            var mapping=ShortcutBindings.REPORT;mapping.setKeyModifierAndCode(KeyModifier.NONE,key(GLFW.GLFW_KEY_F9));
-            check(ShortcutBindings.migrate(mapping,GLFW.GLFW_KEY_F9)&&mapping.isDefault(),"Old unchanged F9 migrates to Ctrl+F9");
-            mapping.setKeyModifierAndCode(KeyModifier.ALT,key(GLFW.GLFW_KEY_F9));
-            check(!ShortcutBindings.migrate(mapping,GLFW.GLFW_KEY_F9)&&mapping.getKeyModifier()==KeyModifier.ALT,"Custom modifiers survive migration");
-            mapping.setKeyModifierAndCode(KeyModifier.NONE,key(GLFW.GLFW_KEY_K));
-            check(!ShortcutBindings.migrate(mapping,GLFW.GLFW_KEY_F9),"Custom key choices survive migration");mapping.setToDefault();
+            var mapping=ShortcutBindings.REPORT;mapping.setKeyModifierAndCode(KeyModifier.NONE,key(InputConstants.KEY_F9));
+            check(ShortcutBindings.migrate(mapping,InputConstants.KEY_F9)&&mapping.isDefault(),"Old unchanged F9 migrates to Ctrl+F9");
+            mapping.setKeyModifierAndCode(KeyModifier.ALT,key(InputConstants.KEY_F9));
+            check(!ShortcutBindings.migrate(mapping,InputConstants.KEY_F9)&&mapping.getKeyModifier()==KeyModifier.ALT,"Custom modifiers survive migration");
+            mapping.setKeyModifierAndCode(KeyModifier.NONE,key(InputConstants.KEY_K));
+            check(!ShortcutBindings.migrate(mapping,InputConstants.KEY_F9),"Custom key choices survive migration");mapping.setToDefault();
             mapping.setKeyModifierAndCode(KeyModifier.NONE,InputConstants.Type.MOUSE.getOrCreate(4));ShortcutBindings.clear();
-            check(ShortcutBindings.pressEdge(mapping.getKey(),GLFW.GLFW_PRESS)&&!ShortcutBindings.pressEdge(mapping.getKey(),GLFW.GLFW_REPEAT),"Mouse remapping shares press/repeat protection");mapping.setToDefault();
+            check(ShortcutBindings.pressEdge(mapping.getKey(),InputConstants.PRESS)&&!ShortcutBindings.pressEdge(mapping.getKey(),InputConstants.REPEAT),"Mouse remapping shares press/repeat protection");mapping.setToDefault();
             for(var palette:UiTheme.Theme.values()){
                 UiTheme.select(palette);
                 for(int[] size:new int[][]{{480,270},{640,360},{854,480},{960,540}}){

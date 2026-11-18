@@ -3,10 +3,11 @@ package net.sprocketgames.lagsense;
 import java.nio.file.*;
 import java.util.*;
 
-import org.lwjgl.glfw.GLFW;
 import org.lwjgl.opengl.*;
 import org.lwjgl.system.MemoryUtil;
 import static org.lwjgl.opengl.GL33C.*;
+import static org.lwjgl.sdl.SDLInit.*;
+import static org.lwjgl.sdl.SDLVideo.*;
 
 /** Executes the shipped shaders in a hidden OpenGL context; no Minecraft/gameplay verification. */
 public final class WorldDisplayGpuChecks {
@@ -16,8 +17,8 @@ public final class WorldDisplayGpuChecks {
     }
     private static String source(String name)throws Exception{
         // Same std140 blocks supplied by Minecraft's DynamicTransforms/Projection snippets.
-        return resource(name).replace("#moj_import <minecraft:dynamictransforms.glsl>","layout(std140) uniform DynamicTransforms { mat4 ModelViewMat; vec4 ColorModulator; vec3 ModelOffset; mat4 TextureMat; };")
-            .replace("#moj_import <minecraft:projection.glsl>","layout(std140) uniform Projection { mat4 ProjMat; };");
+        return resource(name).replace("#include <minecraft:dynamictransforms.glsl>","layout(std140) uniform DynamicTransforms { mat4 ModelViewMat; vec4 ColorModulator; vec3 ModelOffset; mat4 TextureMat; };")
+            .replace("#include <minecraft:projection.glsl>","layout(std140) uniform Projection { mat4 ProjMat; };");
     }
     private static int shader(int kind,String text){int id=glCreateShader(kind);glShaderSource(id,text);glCompileShader(id);check(glGetShaderi(id,GL_COMPILE_STATUS)==GL_TRUE,glGetShaderInfoLog(id));return id;}
     private static int program(boolean intensity)throws Exception{
@@ -32,10 +33,18 @@ public final class WorldDisplayGpuChecks {
     private static void colour(int program,int color,float alpha){int a=glGetAttribLocation(program,"Color");glDisableVertexAttribArray(a);glVertexAttrib4f(a,(color>>16&255)/255f,(color>>8&255)/255f,(color&255)/255f,alpha);}
     private static int[] pixel(){var b=MemoryUtil.memAlloc(4);try{glReadPixels(32,32,1,1,GL_RGBA,GL_UNSIGNED_BYTE,b);return new int[]{b.get(0)&255,b.get(1)&255,b.get(2)&255};}finally{MemoryUtil.memFree(b);}}
     public static void main(String[] args)throws Exception{
-        check(GLFW.glfwInit(),"GLFW initialization failed");long window=0;
+        check(SDL_Init(SDL_INIT_VIDEO),"SDL video initialization failed");
+        long window=0, context=0;
         try{
-            GLFW.glfwWindowHint(GLFW.GLFW_VISIBLE,GLFW.GLFW_FALSE);GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR,3);GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR,3);GLFW.glfwWindowHint(GLFW.GLFW_OPENGL_PROFILE,GLFW.GLFW_OPENGL_CORE_PROFILE);
-            window=GLFW.glfwCreateWindow(64,64,"LagSense shader checks",0,0);check(window!=0,"Could not create hidden GL context");GLFW.glfwMakeContextCurrent(window);GL.createCapabilities();
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION,3);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION,3);
+            SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK,SDL_GL_CONTEXT_PROFILE_CORE);
+            SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,24);
+            window=SDL_CreateWindow("LagSense shader checks",64,64,SDL_WINDOW_HIDDEN|SDL_WINDOW_OPENGL);
+            check(window!=0,"Could not create a hidden SDL window");
+            context=SDL_GL_CreateContext(window);
+            check(context!=0,"Could not create hidden GL context");
+            GL.createCapabilities();
             var results=new ArrayList<String>();
             int vao=glGenVertexArrays();glBindVertexArray(vao);int vbo=glGenBuffers();glBindBuffer(GL_ARRAY_BUFFER,vbo);glBufferData(GL_ARRAY_BUFFER,new float[]{-1,-1,.8f, 1,-1,.8f, 1,1,.8f, -1,-1,.8f, 1,1,.8f, -1,1,.8f},GL_STATIC_DRAW);
             int texture=glGenTextures();glBindTexture(GL_TEXTURE_2D,texture);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
@@ -76,6 +85,10 @@ public final class WorldDisplayGpuChecks {
             glDeleteBuffers(dynamicBuffer);glDeleteBuffers(projection);glDeleteBuffers(vbo);glDeleteTextures(texture);glDeleteVertexArrays(vao);
             check(glGetError()==GL_NO_ERROR,"OpenGL error after marker shader checks");
             System.out.println("World display GPU checks passed: shipped intensity/RGBA shaders compile, half-coverage glyph colour is not multiplied twice, daylight/dark backdrops and all themes, full/faded alpha, native white-atlas dark backgrounds against sky/grass/machinery/dark surfaces, through-depth drawing and unchanged depth buffer. Hidden GL context only.");
-        }finally{if(window!=0)GLFW.glfwDestroyWindow(window);GLFW.glfwTerminate();}
+        }finally{
+            if(context!=0)SDL_GL_DestroyContext(context);
+            if(window!=0)SDL_DestroyWindow(window);
+            SDL_Quit();
+        }
     }
 }

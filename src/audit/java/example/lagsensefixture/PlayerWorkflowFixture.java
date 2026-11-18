@@ -1,6 +1,7 @@
 package example.lagsensefixture;
 
 import net.sprocketgames.lagsense.*;
+import net.sprocketgames.lagsense.compat.ClaimCompatibility;
 
 import java.nio.file.*;
 import java.util.*;
@@ -10,6 +11,10 @@ import net.minecraft.server.permissions.*;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.fml.ModList;
+import xaero.pac.common.parties.party.member.PartyMemberRank;
+import xaero.pac.common.server.api.OpenPACServerAPI;
+import xaero.pac.common.server.config.ServerConfig;
 
 /** Actual command/archive/permission workflow in the disposable audit server. */
 public final class PlayerWorkflowFixture {
@@ -35,11 +40,52 @@ public final class PlayerWorkflowFixture {
         var constructor=ProfilerUi.class.getDeclaredConstructor(MinecraftServer.class,java.util.function.Function.class,java.util.function.BiConsumer.class,java.util.function.BiFunction.class);constructor.setAccessible(true);return constructor.newInstance(server,lookup,transport,access);
     }
     private static void mark(ServerPlayer p,long capture,int index)throws Exception{var method=ProfilerUi.class.getDeclaredMethod("mark",ServerPlayer.class,long.class,int.class);method.setAccessible(true);method.invoke(ui,p,capture,index);}
+    private static void verifyOpac(MinecraftServer server) {
+        var dimension = server.overworld().dimension().identifier();
+        var api = OpenPACServerAPI.get(server);
+        var claims = api.getServerClaimsManager();
+        int x = 7, z = 7;
+        check(claims.claim(dimension, player.getUUID(), 0, x, z, false) != null, "Fixture creates a real OPAC claim");
+        try {
+            var owner = ClaimCompatibility.forPlayer(player, List.of());
+            var stranger = ClaimCompatibility.forPlayer(operator, List.of());
+            check(owner.contains(dimension.toString(), x * 16, z * 16), "OPAC claim owner can see Base Health");
+            check(!stranger.contains(dimension.toString(), x * 16, z * 16), "OPAC claim is private to other players");
+            var partyManager = api.getPartyManager();
+            var party = partyManager.createPartyForOwner(player);
+            boolean partyOwned = ServerConfig.CONFIG.partyOwnedClaims.get();
+            try {
+                check(party.addMember(operator.getUUID(), PartyMemberRank.MEMBER, operator.getGameProfile().name()) != null,
+                    "Fixture adds a real OPAC party member");
+                // Fake players skip OPAC's login hook, which normally creates the owner's player config.
+                api.getPlayerConfigManager().getLoadedConfig(player.getUUID());
+                check(partyManager.getPartyByMember(operator.getUUID()) == party, "OPAC registers the fixture membership");
+                var ownerConfig = api.getPlayerConfigManager().getPartyOwnerConfig(operator.getUUID());
+                check(ownerConfig != null && player.getUUID().equals(ownerConfig.getPlayerId()),
+                    "OPAC resolves the fixture party owner");
+                check(ClaimCompatibility.forPlayer(operator, List.of()).contains(dimension.toString(), x * 16, z * 16) == partyOwned,
+                    "OPAC membership grants report access when party-owned claims are enabled");
+                party.removeMember(operator.getUUID());
+                check(!ClaimCompatibility.forPlayer(operator, List.of()).contains(dimension.toString(), x * 16, z * 16),
+                    "OPAC party removal revokes access on a fresh request");
+            } finally {
+                partyManager.removeParty(party);
+            }
+        } finally {
+            claims.unclaim(dimension, x, z);
+        }
+        check(!ClaimCompatibility.forPlayer(player, List.of()).contains(dimension.toString(), x * 16, z * 16),
+            "A fresh Base Health request observes OPAC claim removal");
+        System.out.println("OPAC Base Health fixture passed: owner access, privacy, membership revocation and claim removal. Party-owned claims: "
+            + ServerConfig.CONFIG.partyOwnedClaims.get());
+    }
+
     public static boolean run(MinecraftServer server)throws Exception{
         if(stage==99)return true;if(++clock>500)throw new AssertionError("Player workflow fixture timed out at stage "+stage);
         if(stage==0){
             oldUi=Profiler.players;oldArchive=Profiler.archives;oldDelivery=Profiler.reportDelivery;oldLatest=Profiler.latest;
             player=new TestPlayer(server,"ScopedViewer",false);operator=new TestPlayer(server,"ScopedOperator",true);
+            if (ModList.get().isLoaded("openpartiesandclaims")) verifyOpac(server);
             var directory=Path.of("player-workflow-fixture");Files.createDirectories(directory);areas=directory.resolve("areas.json");
             Files.writeString(areas,Profiler.JSON.toJson(List.of(new PublicArea("workshop","minecraft:the_nether",81,81,82,82))));Profiler.areas.load(directory);
             server.overworld().setChunkForced(0,0,true);server.overworld().setChunkForced(3,3,true);server.overworld().getChunk(0,0);server.overworld().getChunk(3,3);

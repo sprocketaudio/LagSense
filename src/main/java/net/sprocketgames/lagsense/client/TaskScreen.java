@@ -82,14 +82,14 @@ public final class TaskScreen extends LagScreen {
         retainedCpu();
         if(cpu!=null&&!cpu.state().equals("pending")){if(openingPaths)showPaths();return;}
         if(loadingCpu)return;loadingCpu=true;cpuError="";nextCpuRetry=System.nanoTime()+1_000_000_000L;if(cpuWaitingSince==0)cpuWaitingSince=System.nanoTime();
-        Investigations.cpu(minecraft.screen instanceof CallTreeScreen?minecraft.screen:this,report(),archived,value->{loadingCpu=false;cpu=value;copyData=new ResultText.Cpu(cpu);cpuCopies.clear();details.clear();if(copyPending!=null){long token=copyPending;copyPending=null;if(selection.current(token)){selection.waiting(false);copySelected();}}if(openingPaths||minecraft.screen instanceof CallTreeScreen tree&&tree.belongsTo(this))showPaths();else if(minecraft.screen==this)rebuildWidgets();},
-            error->{loadingCpu=false;openingPaths=false;if(!background)cpuError=error;copyPending=null;selection.waiting(false);if(minecraft.screen==this)rebuildWidgets();});
+        Investigations.cpu(minecraft.gui.screen() instanceof CallTreeScreen?minecraft.gui.screen():this,report(),archived,value->{loadingCpu=false;cpu=value;copyData=new ResultText.Cpu(cpu);cpuCopies.clear();details.clear();if(copyPending!=null){long token=copyPending;copyPending=null;if(selection.current(token)){selection.waiting(false);copySelected();}}if(openingPaths||minecraft.gui.screen() instanceof CallTreeScreen tree&&tree.belongsTo(this))showPaths();else if(minecraft.gui.screen()==this)rebuildWidgets();},
+            error->{loadingCpu=false;openingPaths=false;if(!background)cpuError=error;copyPending=null;selection.waiting(false);if(minecraft.gui.screen()==this)rebuildWidgets();});
     }
     private void showPaths(){
-        openingPaths=false;if(minecraft.screen!=this&&!(minecraft.screen instanceof CallTreeScreen tree&&tree.belongsTo(this)))return;
+        openingPaths=false;if(minecraft.gui.screen()!=this&&!(minecraft.gui.screen() instanceof CallTreeScreen tree&&tree.belongsTo(this)))return;
         var data=pathData();
         if(paths==null||paths.data()!=data&&!(paths.data().state().equals("pending")&&data.state().equals("pending"))){var previous=paths;paths=new CallTreeScreen(this,data,previous==null?ownerFilter:previous.ownerFilter());if(previous!=null)paths.inheritControls(previous);}
-        paths.profileNavigation=profileNavigation;minecraft.setScreen(paths);
+        paths.profileNavigation=profileNavigation;minecraft.gui.setScreen(paths);
     }
     boolean background(){return background;}
     BackgroundCpu backgroundData(){var d=report().diagnostics();return d==null||d.background()==null?BackgroundCpu.empty("legacy"):d.background();}
@@ -134,7 +134,7 @@ public final class TaskScreen extends LagScreen {
             viewOffsets.put(callbackView+":"+byMod,listOffset());if(callbackView!=callbacks){query="";sort="cost";cached=null;}callbackView=callbacks;byMod=mods;
             restoreListOffset(viewOffsets.getOrDefault(callbackView+":"+byMod,0));
         }
-        if(minecraft.screen==this)rebuildWidgets();else minecraft.setScreen(this);
+        if(minecraft.gui.screen()==this)rebuildWidgets();else minecraft.gui.setScreen(this);
     }
     UiMetrics.Flow taskControls(LagScreen screen,boolean callPaths){
         int y=profileNavigation==null?screen.headerControlsTop():profileNavigation.mount(screen,callPaths?"Call Paths":callbackView?"Event Timings":"CPU Activity")+4;
@@ -151,7 +151,7 @@ public final class TaskScreen extends LagScreen {
         controls.dropdown("Sort",116,callbackView?List.of(ProfileControls.choice("cost","Most time"),ProfileControls.choice("calls","Most calls"),ProfileControls.choice("name","Name")):List.of(ProfileControls.choice("cost","Most samples"),ProfileControls.choice("name","Name")),sort,value->{sort=value;cached=null;resetResults();rebuildWidgets();});
         top=controls.finish()+8;refreshRows();
         copyButton(this::copySelected);
-        action("Export",margin()+48,footer(),48,()->minecraft.setScreen(new ExportScreen(this,report(),archived)));
+        action("Export",margin()+48,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,report(),archived)));
         action(profileNavigation==null?"Back":"Close",width-margin()-54,footer(),54,this::onClose);
     }
     private void refreshRows(){
@@ -221,5 +221,5 @@ public final class TaskScreen extends LagScreen {
         if((callbackView?callbacks:tasks).isEmpty())text(g,callbackView?TaskNavigation.callbackState(report().diagnostics()):background&&backgroundData().state().equals("legacy")?"This profile has no background samples.":background&&backgroundData().state().equals("disabled")?"CPU sampling was off for this profile.":"No CPU activity recorded.",margin(),top+8,contentWidth(),UiTheme.SECONDARY);
         super.extractRenderState(g,mx,my,a);
     }
-    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.setScreen(parent);}
+    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.gui.setScreen(parent);}
 }

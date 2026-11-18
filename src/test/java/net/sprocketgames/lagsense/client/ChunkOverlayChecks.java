@@ -14,8 +14,10 @@ final class ChunkOverlayChecks {
     private static void check(boolean value,String why){if(!value)throw new AssertionError(why);}
     private static Object record(String name,Object...args)throws Exception{var type=Arrays.stream(ChunkOverlay.class.getDeclaredClasses()).filter(c->c.getSimpleName().equals(name)).findFirst().orElseThrow();var ctor=type.getDeclaredConstructors()[0];ctor.setAccessible(true);return ctor.newInstance(args);}
     @SuppressWarnings({"unchecked","rawtypes"}) static void run()throws Exception{
-        var depth=ChunkOverlay.PIPELINE.getDepthStencilState();check(depth!=null&&depth.depthTest()==com.mojang.blaze3d.platform.CompareOp.ALWAYS_PASS&&!depth.writeDepth(),"Chunk grids always pass depth and never occlude other overlays by writing depth");
-        check(ChunkOverlay.PIPELINE.getColorTargetState().equals(net.minecraft.client.renderer.RenderPipelines.LINES.getColorTargetState())&&ChunkOverlay.PIPELINE.getVertexFormat()==net.minecraft.client.renderer.RenderPipelines.LINES.getVertexFormat(),"Native line blending and vertex format are preserved");
+        var depth=ChunkOverlay.PIPELINE.getDepthStencilState();check(depth!=null&&depth.depthTest()==com.mojang.renderpearl.api.pipeline.CompareOp.ALWAYS_PASS&&!depth.writeDepth(),"Chunk grids always pass depth and never occlude other overlays by writing depth");
+        var nativeLines=net.minecraft.client.renderer.RenderPipelines.LINES_TRANSLUCENT;
+        check(ChunkOverlay.PIPELINE.getColorTargetStates().getFirst().equals(nativeLines.getColorTargetStates().getFirst()),"Native line blending is preserved");
+        check(ChunkOverlay.PIPELINE.getVertexFormatBinding(0).equals(nativeLines.getVertexFormatBinding(0)),"Native line vertex format is preserved");
         var cells=new ArrayList<Object>();var colours=new HashSet<Integer>();
         for(int i=0;i<1000;i++){var entry=new Report.Entry("Block","fixture:machine","minecraft:overworld",i*16,64,0,1000,1);int colour=TimingSeverity.color(i*100);colours.add(colour);cells.add(record("Cell",new Report.Chunk(entry.dimension(),i,0,1000,1,entry),colour,Component.literal("Chunk "+i+",0 | 1.0 µs/t"),80));}
         var captions=new ArrayList<Object>();for(var cell:cells.subList(0,3))captions.add(record("Caption",cell,.025f));
@@ -26,8 +28,15 @@ final class ChunkOverlayChecks {
             if(method.getName().equals("submitMarkerText")){text.add(args.clone());labelHeights.add(((PoseStack)args[0]).last().pose().m31());}
             if(method.getName().equals("submitText"))throw new AssertionError("Chunk labels must use the brightness-corrected target text path");return method.getReturnType()==void.class?null:proxy;
         });
-        check(ChunkOverlay.class.getDeclaredMethod("render",net.neoforged.neoforge.client.event.RenderLevelStageEvent.AfterLevel.class)!=null,"Chunk overlays render after translucent-world composition");
-        ChunkOverlay.capture(new net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent(state,null,stack,List.of()));state.reset();ChunkOverlay.submit(state,stack,collector);
+        var render=ChunkOverlay.class.getDeclaredMethod("render",net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent.class);
+        render.setAccessible(true);
+        var storage=new net.minecraft.client.renderer.SubmitNodeStorage();
+        state.setRenderData((ContextKey)key.get(null),record("Frame",List.copyOf(cells),List.of(),52.04,61.0,null));
+        render.invoke(null,new net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent(state,storage,stack,List.of()));
+        check(!storage.order(0).alwaysOnTopGizmos.isEmpty()&&storage.order(0).solid.isEmpty(),
+            "Chunk geometry enters the always-on-top pass, after translucent terrain");
+        state.setRenderData((ContextKey)key.get(null),record("Frame",List.copyOf(cells),List.copyOf(captions),52.04,61.0,null));
+        ChunkOverlay.submit(state,stack,collector);
         check(geometry.size()==1&&text.size()==3&&stack.last().pose().equals(original),"All 1,000 nearby floor grids submit in one batch while only three captions render, restoring transforms afterwards");
         check(labelHeights.stream().allMatch(y->Math.abs(y-61)<.001),"Chunk captions are placed three blocks below feet independently of the lower floor grid");
         for(var args:text)check(colours.stream().anyMatch(c->(c&0xffffff)==((int)args[4]&0xffffff))&&((int)args[4]>>>24)>0&&(WorldText.background((int)args[4])>>>24)>0&&((Number)args[1]).floatValue()==-40&&((Number)args[2]).floatValue()==0,"Nearest chunk labels use brightness-corrected faded glyphs with dark backing and unchanged alignment");
@@ -38,7 +47,7 @@ final class ChunkOverlayChecks {
         try{
             var marked=cells.getFirst();geometry.clear();text.clear();
             state.setRenderData((ContextKey)key.get(null),record("Frame",List.of(),List.of(record("Caption",marked,.025f)),52.04,61.0,marked));
-            ChunkOverlay.capture(new net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent(state,null,stack,List.of()));ChunkOverlay.submit(state,stack,collector);
+            ChunkOverlay.submit(state,stack,collector);
             check(geometry.size()==1&&text.size()==1,"A marked chunk renders its own outline and label with no general heatmap cells");
             int[] edges={0};var markSink=(VertexConsumer)Proxy.newProxyInstance(VertexConsumer.class.getClassLoader(),new Class[]{VertexConsumer.class},(proxy,method,args)->{
                 if(method.getName().equals("addVertex"))edges[0]++;
@@ -47,7 +56,7 @@ final class ChunkOverlayChecks {
                 return method.getReturnType()==void.class?null:proxy;
             });geometry.getFirst().render(stack.last(),markSink);check(edges[0]==24,"The marked chunk draws its full sixteen-block perimeter and four corner posts");
             geometry.clear();text.clear();state.setRenderData((ContextKey)key.get(null),record("Frame",List.of(),List.of(),52.04,61.0,null));
-            ChunkOverlay.capture(new net.neoforged.neoforge.client.event.SubmitCustomGeometryEvent(state,null,stack,List.of()));ChunkOverlay.submit(state,stack,collector);
+            ChunkOverlay.submit(state,stack,collector);
             check(geometry.isEmpty()&&text.isEmpty(),"Unmark removes the chunk boundary and caption when the general heatmap is off");
         }finally{LagSenseClient.settings.chunkHeatmap=savedHeatmap;}
         var overlay=new ChunkOverlay();
@@ -56,10 +65,9 @@ final class ChunkOverlayChecks {
         cached.set(overlay,retained);
         var index=ChunkOverlay.class.getDeclaredField("index");index.setAccessible(true);((Map)index.get(overlay)).put("minecraft:overworld",new it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap<>());
         var cache=ChunkOverlay.class.getDeclaredField("textCache");cache.setAccessible(true);((Map)cache.get(overlay)).put(retained,cells.getFirst());
-        var pending=ChunkOverlay.class.getDeclaredField("pending");pending.setAccessible(true);pending.set(null,record("Frame",List.copyOf(cells),List.copyOf(captions),52.04,61.0,null));
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.start();
         net.neoforged.neoforge.common.NeoForge.EVENT_BUS.post(new net.neoforged.neoforge.client.event.ClientPlayerNetworkEvent.LoggingOut(null,null,null));
-        check(cached.get(overlay)==null&&((Map)index.get(overlay)).isEmpty()&&((Map)cache.get(overlay)).isEmpty()&&pending.get(null)==null,"Disconnect releases the previous capture, chunk indexes, caption cache and pending geometry without another world frame");
+        check(cached.get(overlay)==null&&((Map)index.get(overlay)).isEmpty()&&((Map)cache.get(overlay)).isEmpty(),"Disconnect releases the previous capture, chunk indexes and caption cache without another world frame");
         var capture=ClientFrames.class.getDeclaredField("capture");capture.setAccessible(true);capture.set(null,new FrameProfile.Capture());ClientFrames.active=true;var previousFrames=ClientFrames.latest;var completedFrames=new FrameProfile.Capture().finish();ClientFrames.latest=completedFrames;
         ClientFrames.clear();check(!ClientFrames.active&&ClientFrames.latest==completedFrames&&capture.get(null)==null,"Disconnect cancels active frame capture without changing completed results or opening a screen");ClientFrames.latest=previousFrames;
         var readerField=Investigations.class.getDeclaredField("READER");readerField.setAccessible(true);var reader=(java.util.concurrent.ThreadPoolExecutor)readerField.get(null);

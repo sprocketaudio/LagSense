@@ -6,8 +6,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.client.renderer.rendertype.*;
-import com.mojang.blaze3d.pipeline.*;
-import com.mojang.blaze3d.platform.CompareOp;
+import com.mojang.renderpearl.api.pipeline.*;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.Identifier;
 import net.minecraft.util.context.ContextKey;
@@ -18,6 +17,7 @@ public final class ChunkOverlay {
     static final RenderPipeline PIPELINE=RenderPipeline.builder(RenderPipelines.LINES_SNIPPET)
         .withLocation(Identifier.fromNamespaceAndPath("lagsense","chunk_overlay"))
         .withFragmentShader(Identifier.fromNamespaceAndPath("lagsense","core/world_lines"))
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
         .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS,false)).build();
     static final RenderType LINES=RenderType.create("lagsense_chunk_overlay",RenderSetup.builder(PIPELINE).createRenderSetup());
     static final Font.DisplayMode TEXT_MODE=Font.DisplayMode.SEE_THROUGH;
@@ -30,20 +30,19 @@ public final class ChunkOverlay {
     private final net.sprocketgames.lagsense.NearbyChunkLabels nearest=new net.sprocketgames.lagsense.NearbyChunkLabels();
     private final org.joml.Matrix4f projectionView=new org.joml.Matrix4f();
     private final org.joml.Vector4f projected=new org.joml.Vector4f();
-    private static Frame pending;
     private Report cached;
     private int fontGeneration=-1;
     private Report.Entry markedEntry;
     private Cell markedCell;
     private int markedTicks;
-    public ChunkOverlay(){NeoForge.EVENT_BUS.addListener(this::extract);NeoForge.EVENT_BUS.addListener(ChunkOverlay::capture);NeoForge.EVENT_BUS.addListener(ChunkOverlay::render);NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event)->clear());NeoForge.EVENT_BUS.addListener((net.neoforged.neoforge.event.level.LevelEvent.Unload event)->pending=null);}
-    void clear(){pending=null;cached=null;markedEntry=null;markedCell=null;index.clear();textCache.clear();nearest.clear();fontGeneration=-1;}
+    public ChunkOverlay(){NeoForge.EVENT_BUS.addListener(this::extract);NeoForge.EVENT_BUS.addListener(ChunkOverlay::render);NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut event)->clear());}
+    void clear(){cached=null;markedEntry=null;markedCell=null;index.clear();textCache.clear();nearest.clear();fontGeneration=-1;}
     private static long key(int x,int z){return (long)x<<32|z&0xffffffffL;}
     private void extract(ExtractLevelRenderStateEvent event){
         var mc=Minecraft.getInstance();var settings=LagSenseClient.settings;var report=LagSenseClient.markerReport();
         var waypoint=LagSenseClient.waypoint;
         boolean chunkMark=settings.worldMarkers&&waypoint!=null&&waypoint.kind().equals("Chunk");
-        if(!VisualVisibility.visible()||!settings.enabled||(!settings.chunkHeatmap&&!chunkMark)||report==null||mc.player==null||mc.options.hideGui||mc.screen!=null){
+        if(!VisualVisibility.visible()||!settings.enabled||(!settings.chunkHeatmap&&!chunkMark)||report==null||mc.player==null||mc.gui.hud.isHidden()||mc.gui.screen()!=null){
             event.getRenderState().setRenderData(FRAME,null);nearest.clear();if(report==null)clear();return;
         }
         if(cached!=report){
@@ -86,13 +85,12 @@ public final class ChunkOverlay {
         }
         event.getRenderState().setRenderData(FRAME,new Frame(List.copyOf(cells),List.copyOf(captions),y,labelY,marked));
     }
-    static void capture(SubmitCustomGeometryEvent event){pending=event.getLevelRenderState().getRenderData(FRAME);}
-    private static void render(RenderLevelStageEvent.AfterLevel event){
-        if(!VisualVisibility.visible()){pending=null;return;}
-        if(pending!=null)WorldOverlayDraw.render(event,(stack,draw)->submit(event.getLevelRenderState(),stack,draw));
+    private static void render(SubmitCustomGeometryEvent event){
+        if(VisualVisibility.visible()&&event.getLevelRenderState().getRenderData(FRAME)!=null)
+            WorldOverlayDraw.render(event,(stack,draw)->submit(event.getLevelRenderState(),stack,draw));
     }
     static void submit(net.minecraft.client.renderer.state.level.LevelRenderState state,com.mojang.blaze3d.vertex.PoseStack stack,WorldOverlayDraw collector){
-        Frame frame=pending;pending=null;if(frame==null)return;
+        Frame frame=state.getRenderData(FRAME);if(frame==null)return;
         var camera=state.cameraRenderState;
         if(!frame.cells().isEmpty())collector.submitCustomGeometry(stack,LINES,(pose,vertices)->{
             for(var cell:frame.cells()){
@@ -124,7 +122,7 @@ public final class ChunkOverlay {
             var cell=caption.cell();stack.pushPose();
             try{
                 stack.translate(cell.chunk().x()*16.0+8-camera.pos.x,frame.labelY()-camera.pos.y,cell.chunk().z()*16.0+8-camera.pos.z);
-                stack.mulPose(camera.orientation);stack.scale(caption.scale(),-caption.scale(),caption.scale());
+                stack.rotate(camera.orientation);stack.scale(caption.scale(),-caption.scale(),caption.scale());
                 int color=cell==frame.marked()?cell.color():ChunkDisplay.color(cell.color(),Math.hypot(cell.chunk().x()*16.0+8-camera.pos.x,cell.chunk().z()*16.0+8-camera.pos.z),LagSenseClient.settings.distance);
                 collector.submitMarkerText(stack,-cell.width()/2f,0,cell.label().getVisualOrderText(),color);
             }finally{stack.popPose();}

@@ -65,7 +65,7 @@ public final class CallTreeScreen extends LagScreen {
         if(running)controls.dropdown("Sort",ProfileControls.PATH_SORT,List.of(ProfileControls.choice("samples","Most samples"),ProfileControls.choice("name","Name")),sort,value->{sort=value;resetResults();refresh();rebuildWidgets();});
         top=controls.finish()+8;refreshRows();
         copyButton(()->selection.copy(data.limited()?"Call paths incomplete":""));
-        action("Export",margin()+48,footer(),48,()->minecraft.setScreen(new ExportScreen(this,data)));
+        action("Export",margin()+48,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,data)));
         action(profileNavigation==null?"Back":"Close",width-margin()-54,footer(),54,this::onClose);
     }
     private void refreshRows(){
@@ -110,5 +110,5 @@ public final class CallTreeScreen extends LagScreen {
         if(!selectingMod&&!selectingThread&&(running?methods.isEmpty():branches.isEmpty()))text(g,emptyMessage(),margin(),top+8,contentWidth(),parent instanceof TaskScreen task&&!task.pathError().isBlank()?UiTheme.WARNING:UiTheme.SECONDARY);
         super.extractRenderState(g,mx,my,a);
     }
-    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.setScreen(parent);}
+    @Override public void onClose(){if(profileNavigation!=null)profileNavigation.close();else minecraft.gui.setScreen(parent);}
 }

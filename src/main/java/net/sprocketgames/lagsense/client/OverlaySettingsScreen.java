@@ -94,5 +94,5 @@ public final class OverlaySettingsScreen extends SettingsPage {
         headerDivider(g);
         super.extractRenderState(g, mx, my, partial);
     }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
 }

@@ -40,8 +40,8 @@ public final class LagSenseClient {
         });
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(SettingsPayload.TYPE, (p, ctx) -> {
             var mc=Minecraft.getInstance();
-            if(mc.screen instanceof SettingsScreen screen)screen.accept(p);
-            else {var parent=mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen?null:mc.screen;mc.setScreen(new SettingsScreen(parent,p));}
+            if(mc.gui.screen() instanceof SettingsScreen screen)screen.accept(p);
+            else {var parent=mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen?null:mc.gui.screen();mc.gui.setScreen(new SettingsScreen(parent,p));}
         }));
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(ServerSettingsPayload.TYPE, (p, ctx) -> ServerSettingsScreen.accept(p)));
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(InvestigationPayload.TYPE, (p, ctx) -> Investigations.accept(p)));
@@ -51,10 +51,10 @@ public final class LagSenseClient {
         new ChunkOverlay();
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(CaptureSettingsPayload.TYPE, (p, ctx) -> {
             var mc = Minecraft.getInstance();
-            if (p.json().isEmpty()) { if (mc.screen instanceof CaptureSettingsScreen) mc.setScreen(null); return; }
+            if (p.json().isEmpty()) { if (mc.gui.screen() instanceof CaptureSettingsScreen) mc.gui.setScreen(null); return; }
             var state = Profiler.JSON.fromJson(p.json(), CaptureSettings.class);
-            if (mc.screen instanceof CaptureSettingsScreen screen) screen.accept(state, p.message());
-            else mc.setScreen(new CaptureSettingsScreen(mc.screen, state, p.message()));
+            if (mc.gui.screen() instanceof CaptureSettingsScreen screen) screen.accept(state, p.message());
+            else mc.gui.setScreen(new CaptureSettingsScreen(mc.gui.screen(), state, p.message()));
         }));
         bus.addListener((RegisterKeyMappingsEvent e) -> { e.registerCategory(ShortcutBindings.CATEGORY);ShortcutBindings.all().forEach(e::register); });
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(ReportPayload.TYPE, (p, ctx) -> {
@@ -67,35 +67,34 @@ public final class LagSenseClient {
             AreaOverlay.accept(Profiler.JSON.fromJson(p.json(), AreaPayload.State.class))));
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(ArchivePayload.TYPE, (p, ctx) -> {
             var mc = Minecraft.getInstance();
-            if (p.json().isEmpty()) { if (mc.screen instanceof HistoryScreen || mc.screen instanceof ComparisonScreen) mc.setScreen(null); return; }
+            if (p.json().isEmpty()) { if (mc.gui.screen() instanceof HistoryScreen || mc.gui.screen() instanceof ComparisonScreen) mc.gui.setScreen(null); return; }
             var state = Profiler.JSON.fromJson(p.json(), ProfileArchive.State.class);
-            if (mc.screen instanceof HistoryScreen screen) screen.accept(state, p.message());
-            else mc.setScreen(new HistoryScreen(mc.screen, state, p.message()));
+            if (mc.gui.screen() instanceof HistoryScreen screen) screen.accept(state, p.message());
+            else mc.gui.setScreen(new HistoryScreen(mc.gui.screen(), state, p.message()));
         }));
         bus.addListener((RegisterClientPayloadHandlersEvent e) -> e.register(ComparisonPayload.TYPE, (p, ctx) -> {
-            var mc = Minecraft.getInstance(); mc.setScreen(new ComparisonScreen(mc.screen, Profiler.JSON.fromJson(p.json(), ProfileComparison.class)));
+            var mc = Minecraft.getInstance(); mc.gui.setScreen(new ComparisonScreen(mc.gui.screen(), Profiler.JSON.fromJson(p.json(), ProfileComparison.class)));
         }));
         bus.addListener((RegisterClientPayloadHandlersEvent e)->e.register(ComparisonPart.TYPE,(p,ctx)->Comparisons.accept(p)));
         NeoForge.EVENT_BUS.addListener((ClientPlayerNetworkEvent.LoggingOut e) -> { ShortcutBindings.clear();ClientFrames.clear();ClientAccess.reset();report = null; archived = false; completeReport=false; selected = -1; waypoint = null;trackedEntity=null;trackingStatus="";waypointTicks=0;waypointSource=null;waypointIndex=null; worldMarkers.clear();markerIndex=null;EntityMarkers.clear();FullReports.clear(); Comparisons.clear(); ProfilerHud.clear(); AreaOverlay.clear(); Investigations.clear(); });
         NeoForge.EVENT_BUS.addListener((ClientTickEvent.Post e) -> {
             ClientAccess.tick();Investigations.tick();
-            if(Minecraft.getInstance().screen instanceof LagScreen screen)UiButton.refreshAvailability(screen);
+            if(Minecraft.getInstance().gui.screen() instanceof LagScreen screen)UiButton.refreshAvailability(screen);
             ShortcutBindings.tick();
         });
         NeoForge.EVENT_BUS.addListener((RenderFrameEvent.Pre e) -> ClientFrames.frame());
         NeoForge.EVENT_BUS.addListener(this::hud);
         NeoForge.EVENT_BUS.addListener(worldMarkers::extract);
         NeoForge.EVENT_BUS.addListener(worldMarkers::unload);
-        NeoForge.EVENT_BUS.addListener(worldMarkers::capture);
         NeoForge.EVENT_BUS.addListener(worldMarkers::render);
     }
     public static int color(double micros) { return TimingSeverity.color(micros); }
     public static void openSettings() {
         var mc=Minecraft.getInstance();
-        if(mc.screen instanceof SettingsScreen)return;
+        if(mc.gui.screen() instanceof SettingsScreen)return;
         if(mc.player!=null&&mc.getConnection()!=null&&net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(mc.getConnection(),SettingsPayload.TYPE.id()))
             ClientAccess.request("settings");
-        else mc.setScreen(new SettingsScreen(mc.screen,null));
+        else mc.gui.setScreen(new SettingsScreen(mc.gui.screen(),null));
     }
     public static String age() { return report == null ? "No snapshot" : "Snapshot age: " + Math.max(0, (System.currentTimeMillis() - report.capturedAt()) / 1000) + "s"; }
     private void hud(RenderGuiEvent.Post e) {
@@ -148,7 +147,7 @@ public final class LagSenseClient {
         if(VisualVisibility.visible()&&ClientReportPolicy.beganCapture(previous,value,false)&&!settings.enabled){settings.enabled=true;settings.save();}
         if(!ClientAccess.recovering()&&ClientReportPolicy.manualCaptureStarted(previous,value,false))VisualVisibility.reset();
     }
-    private static void rememberProfileView(){var mc=Minecraft.getInstance();if(mc!=null&&mc.screen instanceof ReportScreen screen)screen.rememberPreferences();}
+    private static void rememberProfileView(){var mc=Minecraft.getInstance();if(mc!=null&&mc.gui.screen() instanceof ReportScreen screen)screen.rememberPreferences();}
     static ReportScreen latestReportScreen(){rememberProfileView();return new ReportScreen(null,report,false);}
     public static void openLatestReport(){ClientAccess.open();}
     public static void acceptReport(Report value,boolean open,boolean saved,MarkerIndex markers,boolean complete) {
@@ -157,7 +156,7 @@ public final class LagSenseClient {
         ClientAccess.received(value,markers);storeReport(value,saved,markers,complete);
         ClientAccess.recovered(value);
         if(VisualVisibility.visible()&&ClientReportPolicy.restoreHud(open,saved)&&!settings.enabled){settings.enabled=true;settings.save();}
-        if(open){var mc=Minecraft.getInstance();var parent=mc.screen instanceof net.minecraft.client.gui.screens.ChatScreen?null:mc.screen;mc.setScreen(new ReportScreen(parent,value,saved));}
+        if(open){var mc=Minecraft.getInstance();var parent=mc.gui.screen() instanceof net.minecraft.client.gui.screens.ChatScreen?null:mc.gui.screen();mc.gui.setScreen(new ReportScreen(parent,value,saved));}
     }
     static void restoreMark(Report source,MarkReference reference,ProfilerStatePayload.State grant){
         Report.Entry entry=null;

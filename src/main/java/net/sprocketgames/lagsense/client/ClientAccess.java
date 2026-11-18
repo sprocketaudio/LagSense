@@ -47,7 +47,7 @@ public final class ClientAccess {
     }
     static void open(){
         var mc=Minecraft.getInstance();if(mc==null)return;
-        request("open");mc.setScreen(allowed(LagSenseClient.report)?LagSenseClient.latestReportScreen():new ReportScreen(null,null,false));
+        request("open");mc.gui.setScreen(allowed(LagSenseClient.report)?LagSenseClient.latestReportScreen():new ReportScreen(null,null,false));
     }
     static void accept(ProfilerStatePayload payload){
         final ProfilerStatePayload.State value;try{value=Profiler.JSON.fromJson(payload.json(),ProfilerStatePayload.State.class);}catch(RuntimeException error){failReportLoad();state=null;deadline=0;invalidate(true);return;}
@@ -63,7 +63,7 @@ public final class ClientAccess {
         }
         LagSenseClient.tracked(value.clear()?null:value.trackedEntity());
         if(!value.clear())LagSenseClient.trackingStatus(value);
-        if(mc!=null){if(value.open())mc.setScreen(LagSenseClient.latestReportScreen());else if(before!=admin()&&mc.screen instanceof LagScreen screen)screen.rebuildResults();}
+        if(mc!=null){if(value.open())mc.gui.setScreen(LagSenseClient.latestReportScreen());else if(before!=admin()&&mc.gui.screen() instanceof LagScreen screen)screen.rebuildResults();}
         if(value.message()!=null&&!value.message().isBlank())ShortcutBindings.feedback(value.message());
     }
     static void received(Report report,MarkerIndex markers){completeReportLoad();if(!report.admin()){scoped=report;scopedMarkers=markers;}}
@@ -81,12 +81,12 @@ public final class ClientAccess {
         if(recoveryReport!=0&&valid()&&recoveryAttempts<3&&(recoveryAttempts==0||System.nanoTime()-recoveryAttempt>=30_000_000_000L)){
             if(request(new ProfilerRequest("refresh",recoveryReport,-1))){recoveryAttempt=System.nanoTime();recoveryAttempts++;}
         }
-        var mc=Minecraft.getInstance();if(enabled&&mc!=null&&mc.screen instanceof LagScreen screen&&screen.profileNavigation!=null&&!screen.profileNavigation.permitted()){mc.setScreen(new ReportScreen(null,null,false));request("open");}
+        var mc=Minecraft.getInstance();if(enabled&&mc!=null&&mc.gui.screen() instanceof LagScreen screen&&screen.profileNavigation!=null&&!screen.profileNavigation.permitted()){mc.gui.setScreen(new ReportScreen(null,null,false));request("open");}
     }
     private static void invalidate(boolean navigate){
         clearRecovery();
         epoch++;scoped=null;scopedMarkers=null;LagSenseClient.clearView();
-        var mc=Minecraft.getInstance();if(mc!=null&&navigate&&mc.screen instanceof LagScreen screen){screen.selection.clear();mc.setScreen(new ReportScreen(null,null,false));}
+        var mc=Minecraft.getInstance();if(mc!=null&&navigate&&mc.gui.screen() instanceof LagScreen screen){screen.selection.clear();mc.gui.setScreen(new ReportScreen(null,null,false));}
     }
     static void mark(Report report,Report.Entry entry){
         if(!allowed(report)||report==null||entry==null)return;

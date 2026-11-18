@@ -35,7 +35,7 @@ public final class ComparisonScreen extends LagScreen {
         dimension=index.dimensions.get((index.dimensions.indexOf(dimension)+1)%index.dimensions.size());long token=++query;error="";resetResults();
         if(dimension.equals("All")){view=index.all;loading=false;rebuildWidgets();return;}
         loading=true;String requested=dimension;
-        Comparisons.view(index,requested,next->{if(token!=query)return;view=next;loading=false;if(minecraft.screen==this)rebuildWidgets();},message->{if(token==query){error=message;loading=false;if(minecraft.screen==this)rebuildWidgets();}});
+        Comparisons.view(index,requested,next->{if(token!=query)return;view=next;loading=false;if(minecraft.gui.screen()==this)rebuildWidgets();},message->{if(token==query){error=message;loading=false;if(minecraft.gui.screen()==this)rebuildWidgets();}});
         rebuildWidgets();
     }
     @Override protected void init(){
@@ -51,7 +51,7 @@ public final class ComparisonScreen extends LagScreen {
         var roots=chunks?view.chunks():view.types();visible=loading||!view.dimension().equals(dimension)?List.of():roots.stream().filter(n->index.matches(n,direction)).toList();
         var out=new UiResults(this,top,88,true,false).diagnosticHints().selectable(selection);append(out);results(top,out.entries,true);
         copyButton(()->selection.copy(copyWarning()));
-        action("Export",margin()+48,footer(),48,()->minecraft.setScreen(new ExportScreen(this,comparison)));
+        action("Export",margin()+48,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,comparison)));
         action("Close",width-margin()-54,footer(),54,this::onClose);
     }
     private void append(UiResults out){for(var node:visible)append(out,node,0);}
@@ -102,5 +102,5 @@ public final class ComparisonScreen extends LagScreen {
         if(!note.isEmpty()){String reason=comparison.details()==null?"Aggregate comparison data only.":"Earlier: "+(comparison.details().earlierIncomplete()?comparison.details().earlierLimit():"No collection limit reported")+"\nLater: "+(comparison.details().laterIncomplete()?comparison.details().laterLimit():"No collection limit reported");UiHints.region(g,font,mx,my,margin(),height-64,contentWidth(),14,reason);}
         super.extractRenderState(g,mx,my,partial);
     }
-    @Override public void onClose(){query++;minecraft.setScreen(parent);}
+    @Override public void onClose(){query++;minecraft.gui.setScreen(parent);}
 }

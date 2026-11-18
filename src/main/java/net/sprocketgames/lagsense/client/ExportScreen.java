@@ -128,6 +128,6 @@ public final class ExportScreen extends LagScreen {
         UiHints.region(g, font, mouseX, mouseY, margin(), panelTop()+78, contentWidth(), 12, filename);
         super.extractRenderState(g, mouseX, mouseY, partial);
     }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
     @Override public boolean isPauseScreen() { return false; }
 }

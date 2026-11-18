@@ -48,7 +48,7 @@ public final class HistoryScreen extends LagScreen {
         this.state=state;this.message=message;pendingDesired=null;
         if(applied){enabled=state.settings().enabled();countDraft=""+state.settings().maxProfiles();limitDraft=""+state.settings().maxMiB();count=limit=null;}
         if(baseline!=null&&state.profiles().stream().noneMatch(p->p.id()==baseline))baseline=null;
-        if(applied&&closeAfterApply)minecraft.setScreen(parent);else{closeAfterApply=false;rebuildWidgets();}
+        if(applied&&closeAfterApply)minecraft.gui.setScreen(parent);else{closeAfterApply=false;rebuildWidgets();}
     }
     public static void request(String action, long first, long second) { ClientPacketDistributor.sendToServer(new ArchiveRequestPayload(action, first, second, false, 10, 32)); }
     void navigationFailed(String error){if("Loading…".equals(message)||"Comparing…".equals(message))message=error;}
@@ -102,8 +102,8 @@ public final class HistoryScreen extends LagScreen {
     }
     @Override public void onClose() {
         if(pendingDesired!=null)return;
-        if(dirty())minecraft.setScreen(new UnsavedScreen(this,()->{discardDraft();minecraft.setScreen(parent);},()->{minecraft.setScreen(this);closeAfterApply=true;apply();}));
-        else minecraft.setScreen(parent);
+        if(dirty())minecraft.gui.setScreen(new UnsavedScreen(this,()->{discardDraft();minecraft.gui.setScreen(parent);},()->{minecraft.gui.setScreen(this);closeAfterApply=true;apply();}));
+        else minecraft.gui.setScreen(parent);
     }
     @Override public void removed(){
         if("Loading…".equals(message)||"Comparing…".equals(message))message="";

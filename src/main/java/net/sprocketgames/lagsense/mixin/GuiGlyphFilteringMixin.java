@@ -2,7 +2,7 @@ package net.sprocketgames.lagsense.mixin;
 
 import net.sprocketgames.lagsense.client.UiFont;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.textures.FilterMode;
+import com.mojang.renderpearl.api.textures.FilterMode;
 import net.minecraft.client.gui.font.TextRenderable;
 import net.minecraft.client.gui.render.TextureSetup;
 import net.minecraft.client.renderer.state.gui.GlyphRenderState;

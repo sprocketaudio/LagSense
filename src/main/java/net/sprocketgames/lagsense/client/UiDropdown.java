@@ -25,7 +25,7 @@ final class UiDropdown extends UiButton {
     List<Choice> choices(){return choices;}
     void choose(String id){if(choices.stream().noneMatch(c->c.id().equals(id)))return;screen.closeDropdown();if(!value.equals(id)){
             changed.accept(id);var minecraft=net.minecraft.client.Minecraft.getInstance();
-            if(minecraft!=null&&minecraft.screen instanceof LagScreen current)current.focusDropdown(label);
+            if(minecraft!=null&&minecraft.gui.screen() instanceof LagScreen current)current.focusDropdown(label);
         }}
     @Override public void onPress(InputWithModifiers input){super.onPress(input);if(active)screen.toggleDropdown(this);}
     Menu menu(){return new Menu();}

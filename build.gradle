@@ -4,7 +4,7 @@ plugins {
 }
 version = '1.1.0'
 group = 'net.sprocketgames.lagsense'
-base { archivesName = 'lagsense' }
+base { archivesName = 'lagsense-mc26.3' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
 repositories {
     maven { url = 'https://maven.ftb.dev/releases'; content { includeGroup 'dev.ftb.mods' } }
@@ -12,8 +12,7 @@ repositories {
 }
 def ftbChunks = "dev.ftb.mods:ftb-chunks-neoforge:${providers.gradleProperty('ftbChunksVersion').getOrElse('26.1.2.9')}"
 def ftbTeams = 'dev.ftb.mods:ftb-teams-neoforge:26.1.2.5'
-def ftbLibrary = 'dev.ftb.mods:ftb-library-neoforge:26.1.2.11'
-def opac = 'xaero.pac:open-parties-and-claims-neoforge-26.1.2:0.33.0'
+def opac = 'xaero.pac:open-parties-and-claims-neoforge-26.3:0.33.0'
 def backups = 'dev.ftb.mods:ftb-backups-3:26.1.2.2'
 dependencies {
     // Native font-metric checks use the same FreeType implementation as Minecraft.
@@ -21,31 +20,18 @@ dependencies {
     def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
     def nativePlatform = os.contains('win') ? 'windows' : os.contains('mac') ? 'macos' : 'linux'
     def nativeArch = arch in ['aarch64', 'arm64'] ? '-arm64' : nativePlatform == 'windows' && arch in ['x86', 'i386'] ? '-x86' : ''
-    testRuntimeOnly "org.lwjgl:lwjgl:3.4.1:natives-${nativePlatform}${nativeArch}"
-    testRuntimeOnly "org.lwjgl:lwjgl-freetype:3.4.1:natives-${nativePlatform}${nativeArch}"
-    testRuntimeOnly "org.lwjgl:lwjgl-glfw:3.4.1:natives-${nativePlatform}${nativeArch}"
-    testRuntimeOnly "org.lwjgl:lwjgl-opengl:3.4.1:natives-${nativePlatform}${nativeArch}"
-    testRuntimeOnly "org.lwjgl:lwjgl-stb:3.4.1:natives-${nativePlatform}${nativeArch}"
+    for (def module : ['lwjgl', 'lwjgl-freetype', 'lwjgl-jemalloc', 'lwjgl-sdl', 'lwjgl-opengl', 'lwjgl-stb']) {
+        testRuntimeOnly "org.lwjgl:${module}:3.4.3:natives-${nativePlatform}${nativeArch}"
+    }
     // API references only: none of these mods are bundled or required at runtime.
     compileOnly(ftbChunks) { transitive = false }
     compileOnly(ftbTeams) { transitive = false }
     compileOnly(opac) { transitive = false }
     compileOnly(backups) { transitive = false }
-    if (providers.gradleProperty('backupTest').getOrElse('false') == 'true') {
-        runtimeOnly(backups) { transitive = false }
-        runtimeOnly(ftbLibrary) { transitive = false }
-    }
-    // Optional development runs: -PclaimTest=ftb, opac, or both.
-    def claims = providers.gradleProperty('claimTest').getOrElse('none')
-    if (claims in ['ftb', 'both']) {
-        runtimeOnly(ftbChunks) { transitive = false }
-        runtimeOnly(ftbTeams) { transitive = false }
-        runtimeOnly(ftbLibrary) { transitive = false }
-    }
-    if (claims in ['opac', 'both']) runtimeOnly(opac) { transitive = false }
+    if (providers.gradleProperty('claimTest').getOrElse('none') == 'opac') runtimeOnly(opac) { transitive = false }
 }
 neoForge {
-    version = providers.gradleProperty('neoForgeVersion').getOrElse('26.1.2.121')
+    version = providers.gradleProperty('neoForgeVersion').getOrElse('26.3.0.113')
     runs {
         client { client() }
         localClient { client(); gameDirectory = file('run-local-client'); programArguments.addAll('--username', 'ProfileTester', '--quickPlayMultiplayer', '127.0.0.1:25569'); if (providers.gradleProperty('smallUi').getOrElse('false') == 'true') programArguments.addAll('--width', '640', '--height', '480') }
@@ -81,7 +67,7 @@ tasks.named('test') { failOnNoDiscoveredTests = false }
 
 // Opt-in headless coverage fixture; never included in release jars or ordinary dev runs.
 if (providers.gradleProperty('coverageAudit').getOrElse('false') == 'true') {
-    sourceSets { audit { compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath; runtimeClasspath += output + compileClasspath } }
+    sourceSets { audit { compileClasspath += sourceSets.main.output + sourceSets.main.compileClasspath; runtimeClasspath += output + sourceSets.main.runtimeClasspath } }
     neoForge.mods { lagsense_audit { sourceSet(sourceSets.audit) } }
     neoForge.runs { coverageAudit { server(); programArgument '--nogui'; gameDirectory = file('work/coverage-audit/server') } }
     tasks.named('runCoverageAudit') {

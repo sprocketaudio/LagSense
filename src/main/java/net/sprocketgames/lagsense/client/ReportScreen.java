@@ -45,7 +45,7 @@ public final class ReportScreen extends LagScreen {
         chunkUpdates=report==null?Map.of():report.entries().stream().collect(java.util.stream.Collectors.groupingBy(e->new ProfileResults.Chunk(e.dimension(),e.x()>>4,e.z()>>4),java.util.stream.Collectors.summingLong(Report.Entry::calls)));
         contributors=new ChunkBranches(this,report,archived);
     }
-    @Override public void onClose() { if(profileNavigation!=null)profileNavigation.close();else minecraft.setScreen(parent); }
+    @Override public void onClose() { if(profileNavigation!=null)profileNavigation.close();else minecraft.gui.setScreen(parent); }
     @Override public void removed(){rememberPreferences();super.removed();}
     void rememberPreferences(){
         if(report==null)return;
@@ -101,7 +101,7 @@ public final class ReportScreen extends LagScreen {
         top=resultControls(navBottom).bottom()+8;
         refreshRows();
         copyButton(this::copySelected);
-        var export=action("Export",margin()+Math.max(44,UiFonts.labelWidth("Copy")+12)+4,footer(),48,()->minecraft.setScreen(new ExportScreen(this,report,archived)));
+        var export=action("Export",margin()+Math.max(44,UiFonts.labelWidth("Copy")+12)+4,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,report,archived)));
         var unmark=action("Unmark",export.getX()+export.getWidth()+4,footer(),50,TargetActions::unmark);
         if(report.admin())action("Return",unmark.getX()+unmark.getWidth()+4,footer(),48,()->{if(TargetActions.canReturn()&&minecraft.player!=null)minecraft.player.connection.sendCommand("lagsense return");}).enabledWhen(TargetActions::canReturn).visibleWhen(()->TargetActions.permitted(false));
         action("Close", width - margin() - 54, footer(), 54, this::onClose);
@@ -226,7 +226,7 @@ public final class ReportScreen extends LagScreen {
         contributors.copySelected(root,ReportCompleteness.reason(report));
     }
     @Override public void tick() {
-        if(report==null&&LagSenseClient.report!=null){minecraft.setScreen(new ReportScreen(null,LagSenseClient.report,false));return;}
+        if(report==null&&LagSenseClient.report!=null){minecraft.gui.setScreen(new ReportScreen(null,LagSenseClient.report,false));return;}
         if(report==null&&!emptyState.equals(emptyMessage()))rebuildWidgets();
         if(report!=null)contributors.tick(this::resultVisible);
     }

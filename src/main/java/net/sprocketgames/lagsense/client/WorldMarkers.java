@@ -2,11 +2,17 @@ package net.sprocketgames.lagsense.client;
 
 import net.sprocketgames.lagsense.*;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.renderpearl.api.pipeline.BlendFunction;
+import com.mojang.renderpearl.api.pipeline.ColorTargetState;
+import com.mojang.renderpearl.api.pipeline.CompareOp;
+import com.mojang.renderpearl.api.pipeline.DepthStencilState;
+import com.mojang.renderpearl.api.pipeline.RenderPipeline;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.*;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.multiplayer.ClientLevel;
+import net.minecraft.client.renderer.RenderPipelines;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -20,10 +26,11 @@ import org.joml.Vector4f;
 /** Through-wall outlines, crosshair captions and persistent marked targets. */
 final class WorldMarkers {
     static final Font.DisplayMode TEXT_MODE=Font.DisplayMode.SEE_THROUGH;
-    static final com.mojang.blaze3d.pipeline.RenderPipeline PIPELINE=com.mojang.blaze3d.pipeline.RenderPipeline.builder(net.minecraft.client.renderer.RenderPipelines.LINES_SNIPPET)
+    static final RenderPipeline PIPELINE=RenderPipeline.builder(RenderPipelines.LINES_SNIPPET)
         .withLocation(Identifier.fromNamespaceAndPath("lagsense","world_markers"))
         .withFragmentShader(Identifier.fromNamespaceAndPath("lagsense","core/world_lines"))
-        .withDepthStencilState(new com.mojang.blaze3d.pipeline.DepthStencilState(com.mojang.blaze3d.platform.CompareOp.ALWAYS_PASS,false)).build();
+        .withColorTargetState(new ColorTargetState(BlendFunction.TRANSLUCENT))
+        .withDepthStencilState(new DepthStencilState(CompareOp.ALWAYS_PASS,false)).build();
     static final net.minecraft.client.renderer.rendertype.RenderType LINES=net.minecraft.client.renderer.rendertype.RenderType.create("lagsense_world_markers",net.minecraft.client.renderer.rendertype.RenderSetup.builder(PIPELINE).createRenderSetup());
     static final float LINE_WIDTH=2.5f,FOCUS_LINE_WIDTH=8,MARK_LINE_WIDTH=4,FOCUS_SCALE=1.35f;
     static final int MARK_COLOR=0xff63d9ff;
@@ -44,14 +51,13 @@ final class WorldMarkers {
     private final BlockPos.MutableBlockPos blockPos=new BlockPos.MutableBlockPos();
     private final Map<Object,String> registryNames=new IdentityHashMap<>();
     private List<Block> outlines=List.of();
-    private Frame pending;
     private Report report;
     private MarkerIndex index;
     private ClientLevel level;
     private long tick=Long.MIN_VALUE;
     private int range,fontGeneration=-1,cameraX,cameraY,cameraZ;
     private double minimum;
-    void clear(){pending=null;report=null;index=null;level=null;tick=Long.MIN_VALUE;outlines=List.of();textCache.clear();registryNames.clear();EntityMarkers.clear();}
+    void clear(){report=null;index=null;level=null;tick=Long.MIN_VALUE;outlines=List.of();textCache.clear();registryNames.clear();EntityMarkers.clear();}
     void unload(net.neoforged.neoforge.event.level.LevelEvent.Unload event){if(event.getLevel()==level)clear();}
     private <T>String registryName(net.minecraft.core.Registry<T> registry,T type){var name=registryNames.get(type);if(name==null){name=registry.getKey(type).toString();registryNames.put(type,name);}return name;}
     private MarkerEligibility.Block live(ClientLevel level,int x,int y,int z){
@@ -79,7 +85,7 @@ final class WorldMarkers {
     }
     void extract(ExtractLevelRenderStateEvent event){
         var mc=Minecraft.getInstance();var s=LagSenseClient.settings;var value=LagSenseClient.markerReport();var markers=LagSenseClient.markerData();
-        if(!VisualVisibility.visible()||!s.enabled||!s.worldMarkers||value==null||markers==null||mc.options.hideGui||mc.screen!=null){event.getRenderState().setRenderData(FRAME,null);if(value==null)clear();return;}
+        if(!VisualVisibility.visible()||!s.enabled||!s.worldMarkers||value==null||markers==null||mc.gui.hud.isHidden()||mc.gui.screen()!=null){event.getRenderState().setRenderData(FRAME,null);if(value==null)clear();return;}
         Vec3 camera=event.getCamera().position();String dimension=event.getLevel().dimension().identifier().toString();prepare(event.getLevel(),value,markers,camera);
         var cameraState=event.getRenderState().cameraRenderState;projectionView.set(cameraState.projectionMatrix).mul(cameraState.viewRotationMatrix);
         int height=mc.getWindow().getGuiScaledHeight();labelBounds.begin(mc.getWindow().getGuiScaledWidth(),height);
@@ -175,11 +181,9 @@ final class WorldMarkers {
         if(!labelBounds.offer(px,py,label.width()*pixels,9*pixels,true))return;
         output.add(new Text(label,position,scale,offset,focused,label.color(),entry.kind().equals("Entity")));
     }
-    // LevelRenderState resets custom data before AfterLevel, so retain this frame at submission time.
-    void capture(SubmitCustomGeometryEvent event){pending=event.getLevelRenderState().getRenderData(FRAME);}
-    void render(RenderLevelStageEvent.AfterLevel event){
-        if(!VisualVisibility.visible()){pending=null;return;}
-        if(pending!=null)WorldOverlayDraw.render(event,(stack,draw)->submit(event.getLevelRenderState(),stack,draw));
+    void render(SubmitCustomGeometryEvent event){
+        if(VisualVisibility.visible()&&event.getLevelRenderState().getRenderData(FRAME)!=null)
+            WorldOverlayDraw.render(event,(stack,draw)->submit(event.getLevelRenderState(),stack,draw));
     }
     static int outlineColor(int color,boolean focused,double distance,double range){
         if(focused)return color;
@@ -188,7 +192,7 @@ final class WorldMarkers {
         return (Math.max(1,(int)Math.round((color>>>24)*opacity))<<24)|(color&0xffffff);
     }
     void submit(net.minecraft.client.renderer.state.level.LevelRenderState state,PoseStack stack,WorldOverlayDraw collector){
-        var frame=pending;pending=null;if(frame==null)return;var camera=state.cameraRenderState;
+        var frame=state.getRenderData(FRAME);if(frame==null)return;var camera=state.cameraRenderState;
         if(!frame.outlines().isEmpty())collector.submitCustomGeometry(stack,LINES,(pose,vertices)->{
             for(var block:frame.outlines()){
                 var e=block.entry();float x=(float)(e.x()-camera.pos.x),y=(float)(e.y()-camera.pos.y),z=(float)(e.z()-camera.pos.z);boolean focused=BlockPos.asLong(e.x(),e.y(),e.z())==frame.focusedPosition();
@@ -216,7 +220,7 @@ final class WorldMarkers {
             if(placed.focused()!=(pass==1)||!placed.focused()&&!placed.entity())continue;
             if(placed.focused()&&!focusPass){collector.flush();focusPass=true;}
             var p=placed.position();var label=placed.label();stack.pushPose();
-            try{stack.translate(p.x()+.5-camera.pos.x,p.y()+p.labelHeight()-camera.pos.y,p.z()+.5-camera.pos.z);stack.mulPose(camera.orientation);stack.scale(placed.scale(),-placed.scale(),placed.scale());collector.submitMarkerText(stack,-label.width()/2f,placed.offset(),label.text().getVisualOrderText(),placed.color());}
+            try{stack.translate(p.x()+.5-camera.pos.x,p.y()+p.labelHeight()-camera.pos.y,p.z()+.5-camera.pos.z);stack.rotate(camera.orientation);stack.scale(placed.scale(),-placed.scale(),placed.scale());collector.submitMarkerText(stack,-label.width()/2f,placed.offset(),label.text().getVisualOrderText(),placed.color());}
             finally{stack.popPose();}
         }
     }

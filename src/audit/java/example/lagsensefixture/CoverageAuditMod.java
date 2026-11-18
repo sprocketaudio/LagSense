@@ -251,7 +251,20 @@ public final class CoverageAuditMod {
             "Real multi-dimension force-loaded chunks are observed during a capture without players");
         String sent=discordHtml.get();require(sent!=null&&sent.contains("<!doctype html>")&&sent.contains("LagSense | Manual Capture")&&sent.contains(Long.toString(report.id()))&&!sent.contains("CPU sample analysis pending."),"Automatic delivery waits for the actual completed CPU-enriched capture and attaches its full HTML");
         String marker="<script id=\"report-data\" type=\"application/json\">";int first=sent.indexOf(marker)+marker.length(),last=sent.indexOf("</script>",first);
-        var document=com.google.gson.JsonParser.parseString(sent.substring(first,last)).getAsJsonObject();var exported=Profiler.JSON.fromJson(document.get("data"),Report.class);
+        var document=com.google.gson.JsonParser.parseString(sent.substring(first,last)).getAsJsonObject();
+        var columns=document.getAsJsonArray("entryColumns");
+        var strings=document.getAsJsonArray("strings");
+        var decoder=new com.google.gson.GsonBuilder().registerTypeAdapter(Report.Entry.class,
+            (com.google.gson.JsonDeserializer<Report.Entry>)(value,type,context)->{
+                var row=value.getAsJsonArray();
+                var fields=new com.google.gson.JsonObject();
+                for(int i=0;i<row.size();i++) {
+                    var cell=row.get(i);
+                    if(!cell.isJsonNull()) fields.add(columns.get(i).getAsString(), i<3 ? strings.get(cell.getAsInt()) : cell);
+                }
+                return Profiler.JSON.fromJson(fields,Report.Entry.class);
+            }).create();
+        var exported=decoder.fromJson(document.get("data"),Report.class);
         require(activity.equals(exported.diagnostics().activity())&&sent.contains("Server Activity")&&sent.contains("Active · "),
             "The Discord summary and offline HTML attachment use the same sampled server activity");
         require(exported.id()==report.id()&&exported.entries().equals(report.entries())&&exported.diagnostics().callbacks().equals(report.diagnostics().callbacks())&&exported.diagnostics().cpu().equals(report.diagnostics().cpu())&&exported.diagnostics().background().equals(report.diagnostics().background())&&exported.diagnostics().performance().equals(performance),"The actual Discord attachment contains every retained target, event handler, server/background call path and exact performance interval");

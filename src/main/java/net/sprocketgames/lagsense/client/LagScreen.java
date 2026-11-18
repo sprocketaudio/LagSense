@@ -153,7 +153,7 @@ public abstract class LagScreen extends Screen {
             extractBlurredBackground(g);
             g.fill(0, 0, width, height, 0x20000000);
         }
-        minecraft.gui.extractDeferredSubtitles();
+        minecraft.gui.hud.extractDeferredSubtitles();
     }
     @Override public void removed() { closeDropdown();selection.clear();UiHints.clear(this); super.removed(); }
     @Override public boolean isPauseScreen() { return false; }

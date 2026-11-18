@@ -30,7 +30,7 @@ public final class ChunkScreen extends LagScreen {
         top=controls.finish()+8;
         rowsMounted=false;refreshRows();
         copyButton(()->branches.copySelected(null,""));
-        UiHints.hint(action("Export",margin()+48,footer(),48,()->{var data=branches.snapshot(dimension,chunkX,chunkZ);if(data!=null)minecraft.setScreen(new ExportScreen(this,data,profile,archived));}),"Export received contributors and category totals.");
+        UiHints.hint(action("Export",margin()+48,footer(),48,()->{var data=branches.snapshot(dimension,chunkX,chunkZ);if(data!=null)minecraft.gui.setScreen(new ExportScreen(this,data,profile,archived));}),"Export received contributors and category totals.");
         action("Back",width-margin()-54,footer(),54,this::onClose);
     }
     private boolean rowsMounted;
@@ -47,5 +47,5 @@ public final class ChunkScreen extends LagScreen {
         canvas(g,"CHUNK "+chunkX+", "+chunkZ);text(g,branches.summary(dimension,chunkX,chunkZ),margin(),panelTop()+25,contentWidth(),UiTheme.SECONDARY);headerDivider(g);
         super.extractRenderState(g,mx,my,a);
     }
-    @Override public void onClose(){minecraft.setScreen(parent);}
+    @Override public void onClose(){minecraft.gui.setScreen(parent);}
 }

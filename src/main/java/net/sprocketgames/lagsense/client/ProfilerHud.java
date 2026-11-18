@@ -31,7 +31,7 @@ final class ProfilerHud {
     static void draw(GuiGraphicsExtractor g, boolean preview) {
         if(!preview&&!VisualVisibility.visible())return;
         var mc = Minecraft.getInstance(); var s = LagSenseClient.settings;
-        if (!ClientReportPolicy.showHud(s.enabled, LagSenseClient.markerReport() != null, mc.player != null, mc.options.hideGui, mc.screen != null, preview)) return;
+        if (!ClientReportPolicy.showHud(s.enabled, LagSenseClient.markerReport() != null, mc.player != null, mc.gui.hud.isHidden(), mc.gui.screen() != null, preview)) return;
         Report report = LagSenseClient.markerReport() == null ? PREVIEW : LagSenseClient.markerReport();
         var waypoint = report == PREVIEW ? null : LagSenseClient.waypoint;
         if (prepared != report) {

@@ -16,7 +16,7 @@ public final class Comparisons {
         long generation=epoch;
         try{worker.execute(()->{try{
             var data=ComparisonWire.decode(complete.bytes());var index=new ComparisonIndex(data);
-            Minecraft.getInstance().execute(()->{if(generation!=epoch||complete.serial()!=assembly.serial())return;var mc=Minecraft.getInstance();mc.setScreen(new ComparisonScreen(mc.screen,index));});
+            Minecraft.getInstance().execute(()->{if(generation!=epoch||complete.serial()!=assembly.serial())return;var mc=Minecraft.getInstance();mc.gui.setScreen(new ComparisonScreen(mc.gui.screen(),index));});
         }catch(Exception failure){Minecraft.getInstance().execute(()->{if(generation==epoch&&complete.serial()==assembly.serial())error("Could not read comparison. Try again.");});}});}catch(RejectedExecutionException busy){error("Comparison is busy. Try again shortly.");}
     }
     static void view(ComparisonIndex index,String dimension,Consumer<ComparisonIndex.View> ready,Consumer<String> error){
@@ -27,6 +27,6 @@ public final class Comparisons {
         long generation=epoch;
         try{worker.execute(()->{try{String json=ReportExport.json(comparison);Minecraft.getInstance().execute(()->{if(generation==epoch)Minecraft.getInstance().keyboardHandler.setClipboard(json);});}catch(Exception failure){Minecraft.getInstance().execute(()->error("Could not copy comparison."));}});}catch(RejectedExecutionException busy){error("Comparison is busy. Try again shortly.");}
     }
-    private static void error(String message){var mc=Minecraft.getInstance();if(mc.screen instanceof HistoryScreen history)history.navigationFailed(message);if(mc.player!=null)mc.getChatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal(message),false);}
+    private static void error(String message){var mc=Minecraft.getInstance();if(mc.gui.screen() instanceof HistoryScreen history)history.navigationFailed(message);if(mc.player!=null)mc.gui.chatListener().handleSystemMessage(net.minecraft.network.chat.Component.literal(message),false);}
     private Comparisons(){}
 }

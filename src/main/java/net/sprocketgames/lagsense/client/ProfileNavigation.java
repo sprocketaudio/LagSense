@@ -43,18 +43,18 @@ public final class ProfileNavigation {
         if(mc.player!=null&&mc.getConnection()!=null&&net.neoforged.neoforge.network.registration.NetworkRegistry.hasChannel(mc.getConnection(),ArchivePayload.TYPE.id()))HistoryScreen.request("list",0,0);
         else ShortcutBindings.feedback("LagSense is required on the server to open history.");
     }
-    void open(String tab){if(report==null){results.emptyView(tab);Minecraft.getInstance().setScreen(results);return;}switch(tab){
-        case "Targets"->{if(results.currentCategory().equals("Chunks"))results.selectView(results.targetCategory());Minecraft.getInstance().setScreen(results);}
-        case "Chunks"->{results.selectView("Chunks");Minecraft.getInstance().setScreen(results);}
+    void open(String tab){if(report==null){results.emptyView(tab);Minecraft.getInstance().gui.setScreen(results);return;}switch(tab){
+        case "Targets"->{if(results.currentCategory().equals("Chunks"))results.selectView(results.targetCategory());Minecraft.getInstance().gui.setScreen(results);}
+        case "Chunks"->{results.selectView("Chunks");Minecraft.getInstance().gui.setScreen(results);}
         case "Map"->map();
         case "CPU Activity"->{var screen=tasks();if(screen!=null)screen.selectSection(false);}
         case "Event Timings"->{var screen=tasks();if(screen!=null)screen.selectSection(true);}
-        case "Call Paths"->{var screen=tasks();if(screen!=null){Minecraft.getInstance().setScreen(screen);screen.openPaths();}}
+        case "Call Paths"->{var screen=tasks();if(screen!=null){Minecraft.getInstance().gui.setScreen(screen);screen.openPaths();}}
         default->throw new IllegalArgumentException("Unknown profiler tab");
     }}
     private void map(){
         if(map==null){map=new HeatmapScreen(results,report,archived);map.profileNavigation=this;}
-        Minecraft.getInstance().setScreen(map);
+        Minecraft.getInstance().gui.setScreen(map);
     }
     private TaskScreen tasks(){
         if(!report.admin())return null;
@@ -89,6 +89,6 @@ public final class ProfileNavigation {
         }
         return status;
     }
-    public void close(){Minecraft.getInstance().setScreen(parent);}
+    public void close(){Minecraft.getInstance().gui.setScreen(parent);}
     boolean permitted(){return report==null||ClientAccess.allowed(report);}
 }

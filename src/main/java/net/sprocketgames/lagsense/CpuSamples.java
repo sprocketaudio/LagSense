@@ -20,7 +20,7 @@ public final class CpuSamples {
     public CpuSamples(long serverId,String serverName,DiagnosticBudget serverBudget,DiagnosticBudget backgroundBudget,int depth){server=new Activity(serverId,serverName,serverBudget,depth);this.budget=backgroundBudget;this.depth=depth;}
     public void add(long id,String name,List<CpuInvestigation.Frame> frames){add(id,name,frames,false);}
     public void add(long id,String name,List<CpuInvestigation.Frame> frames,boolean jvmTruncated){
-        if(id<=0||frames.isEmpty()||name.startsWith("LagSense ")||name.equals("Render thread")||frames.stream().anyMatch(f->f.type().startsWith("net.sprocketgames.lagsense.")&&!CpuHotPaths.adapterFrame(f.type())||f.type().startsWith("net.minecraft.client.")||f.type().startsWith("com.mojang.blaze3d.")))return;
+        if(id<=0||frames.isEmpty()||name.startsWith("LagSense ")||name.equals("Render thread")||frames.stream().anyMatch(f->f.type().startsWith("net.sprocketgames.lagsense.")&&!CpuHotPaths.adapterFrame(f.type())||f.type().startsWith("net.minecraft.client.")||f.type().startsWith("com.mojang.blaze3d.")||f.type().startsWith("com.mojang.renderpearl.")))return;
         var path=CpuHotPaths.chooseOwned(frames);
         if(path==null&&id!=server.id){var leaf=frames.getFirst();path=new CpuHotPaths.Path(leaf.owner(),leaf.type()+"#"+leaf.name());}
         if(path==null)return;

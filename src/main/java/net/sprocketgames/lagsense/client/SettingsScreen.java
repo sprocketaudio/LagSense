@@ -18,7 +18,7 @@ public final class SettingsScreen extends SettingsPage {
         for(var category:categories) {
             action(category.label,x,y,w,()->{
                 switch(category) {
-                    case HUD -> minecraft.setScreen(new OverlaySettingsScreen(this));
+                    case HUD -> minecraft.gui.setScreen(new OverlaySettingsScreen(this));
                     case CAPTURES -> ClientAccess.request("captures");
                     case DISCORD -> ServerSettingsScreen.request("discord");
                     case ADVANCED -> ServerSettingsScreen.request("advanced");
@@ -28,5 +28,5 @@ public final class SettingsScreen extends SettingsPage {
         action("Back", width - margin() - 54, footer(), 54, this::onClose);
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g, int mx, int my, float a) { canvas(g,"SETTINGS"); headerDivider(g); super.extractRenderState(g,mx,my,a); }
-    @Override public void onClose() { minecraft.setScreen(parent); }
+    @Override public void onClose() { minecraft.gui.setScreen(parent); }
 }

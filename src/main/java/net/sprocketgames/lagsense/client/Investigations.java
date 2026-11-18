@@ -29,7 +29,7 @@ public final class Investigations {
         if(active!=null&&now>=deadline){var p=active;active=null;assembly.clear();p.error().accept("No reply. Reopen this branch to retry.");}
         if(active!=null||queue.isEmpty()||now-lastSent<650_000_000L)return;
         var p=queue.removeFirst();var mc=Minecraft.getInstance();
-        if(mc.screen!=p.owner()){p.error().accept("Open this branch again to load it.");return;}
+        if(mc.gui.screen()!=p.owner()){p.error().accept("Open this branch again to load it.");return;}
         if(mc.getConnection()==null||!NetworkRegistry.hasChannel(mc.getConnection(),p.packet().type().id())) {
             p.error().accept(p.packet() instanceof ChunkBatchRequest?"Update LagSense on the server to load remaining contributors.":"Update LagSense on the server to open details.");return;
         }
@@ -65,7 +65,7 @@ public final class Investigations {
     }
     public static void cpu(Screen owner,Report report,boolean archived,Consumer<CpuInvestigation> ready) {cpu(owner,report,archived,ready,error->{});}
     public static void chunk(Screen parent,Report report,boolean archived,String dim,int x,int z) {
-        Minecraft.getInstance().setScreen(new ChunkScreen(parent,report,archived,dim,x,z));
+        Minecraft.getInstance().gui.setScreen(new ChunkScreen(parent,report,archived,dim,x,z));
     }
     public static void accept(InvestigationPart packet){
         var p=active;if(p==null||p.token()!=packet.part().transfer()||decoding)return;

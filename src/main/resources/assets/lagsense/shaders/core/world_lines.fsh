@@ -1,5 +1,6 @@
 #version 330
-#moj_import <minecraft:dynamictransforms.glsl>
-in vec4 vertexColor;
-out vec4 fragColor;
+#extension GL_ARB_separate_shader_objects : require
+#include <minecraft:dynamictransforms.glsl>
+layout(location = 2) in vec4 vertexColor;
+layout(location = 0) out vec4 fragColor;
 void main() { fragColor = vertexColor * ColorModulator; }

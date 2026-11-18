@@ -97,7 +97,7 @@ public final class UiFonts {
     }
     static void reloaded() {
         generation++; cache.clear(); names.clear(); UiHints.fontsReloaded(); ProfilerHud.clear();
-        if (Minecraft.getInstance().screen instanceof LagScreen screen) screen.reloadTypography();
+        if (Minecraft.getInstance().gui.screen() instanceof LagScreen screen) screen.reloadTypography();
     }
     private UiFonts() {}
 }

@@ -32,7 +32,7 @@ public final class AreaOverlay {
     }
     private void extract(ExtractLevelRenderStateEvent event) {
         var mc = Minecraft.getInstance();
-        if (mc.player == null || mc.options.hideGui || mc.screen != null || (!state.display() || state.areas().isEmpty()) && state.selection() == null) { event.getRenderState().setRenderData(FRAME, null); return; }
+        if (mc.player == null || mc.gui.hud.isHidden() || mc.gui.screen() != null || (!state.display() || state.areas().isEmpty()) && state.selection() == null) { event.getRenderState().setRenderData(FRAME, null); return; }
         String dimension = event.getLevel().dimension().identifier().toString(); Vec3 camera = event.getCamera().position();
         List<Line> lines = new ArrayList<>(); List<Caption> captions = new ArrayList<>();
         double y = Math.clamp(Math.floor(mc.player.getY()) + .03, event.getLevel().getMinY() + 1.0, event.getLevel().getMaxY() - 1.0);
@@ -109,7 +109,7 @@ public final class AreaOverlay {
         });
         for (Caption caption : frame.captions()) {
             stack.pushPose(); stack.translate(caption.pos().x - camera.pos.x, caption.pos().y - camera.pos.y, caption.pos().z - camera.pos.z);
-            stack.mulPose(camera.orientation); stack.scale(.025f, -.025f, .025f);
+            stack.rotate(camera.orientation); stack.scale(.025f, -.025f, .025f);
             int labelWidth = Minecraft.getInstance().font.width(UiFonts.worldText(caption.text()));
             collector.submitText(stack, -labelWidth / 2f, 0,
                 // World text is rendered by Minecraft’s default Font, so supply the UI face explicitly.
@@ -118,7 +118,7 @@ public final class AreaOverlay {
         }
     }
     private void hud(RenderGuiEvent.Post event) {
-        var mc = Minecraft.getInstance(); if (mc.player == null || mc.options.hideGui || mc.screen != null) return;
+        var mc = Minecraft.getInstance(); if (mc.player == null || mc.gui.hud.isHidden() || mc.gui.screen() != null) return;
         var selected = state.selection(); if (selected == null && (!state.display() || state.areas().isEmpty())) return;
         var g = event.getGuiGraphics(); int x = Math.max(4, g.guiWidth() - 264), y = g.guiHeight() - 92;
         g.fill(x, y, g.guiWidth() - 4, y + (selected == null ? 17 : 29), UiTheme.HUD);

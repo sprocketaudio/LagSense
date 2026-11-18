@@ -20,7 +20,7 @@ public final class CaptureSettingsScreen extends SettingsPage {
         var s = state.spikes(); tpsValue = "" + s.minimumTps(); sustainValue = "" + s.sustainSeconds(); workValue = "" + s.thresholdMs(); ticksValue = "" + s.consecutive(); spikeValue = "" + s.captureSeconds(); cooldownValue = "" + s.cooldownSeconds();
         interval = timerLength = tps = sustain = work = consecutive = spikeLength = cooldown = null;
     }
-    public void accept(CaptureSettings state, String message) { confirmed=state; boolean saved=state.equals(pendingDesired)&&message.equals("Settings applied."); if(saved)acceptDraft(state); this.message = message; waiting = false; pendingDesired=null; if(saved&&closeAfterApply)minecraft.setScreen(parent);else{closeAfterApply=false;rebuildWidgets();} }
+    public void accept(CaptureSettings state, String message) { confirmed=state; boolean saved=state.equals(pendingDesired)&&message.equals("Settings applied."); if(saved)acceptDraft(state); this.message = message; waiting = false; pendingDesired=null; if(saved&&closeAfterApply)minecraft.gui.setScreen(parent);else{closeAfterApply=false;rebuildWidgets();} }
     private String value(EditBox box,String stored){return box==null?stored:box.getValue();}
     private CaptureSettings draft(){return new CaptureSettings(new ProfileSchedule.Settings(timerEnabled,Integer.parseInt(value(interval,intervalValue)),Integer.parseInt(value(timerLength,timerValue))),new SpikeDetector.Settings(spikesEnabled,Double.parseDouble(value(work,workValue)),Integer.parseInt(value(consecutive,ticksValue)),Integer.parseInt(value(spikeLength,spikeValue)),Integer.parseInt(value(cooldown,cooldownValue)),Double.parseDouble(value(tps,tpsValue)),Integer.parseInt(value(sustain,sustainValue))));}
     private boolean dirty(){try{return !draft().equals(confirmed);}catch(IllegalArgumentException e){return true;}}
@@ -72,5 +72,5 @@ public final class CaptureSettingsScreen extends SettingsPage {
         headerDivider(g);
         super.extractRenderState(g, mx, my, partial);
     }
-    @Override public void onClose() { if(waiting)return; if(dirty())minecraft.setScreen(new UnsavedScreen(this,()->{acceptDraft(confirmed);minecraft.setScreen(parent);},()->{minecraft.setScreen(this);closeAfterApply=true;apply();}));else minecraft.setScreen(parent); }
+    @Override public void onClose() { if(waiting)return; if(dirty())minecraft.gui.setScreen(new UnsavedScreen(this,()->{acceptDraft(confirmed);minecraft.gui.setScreen(parent);},()->{minecraft.gui.setScreen(this);closeAfterApply=true;apply();}));else minecraft.gui.setScreen(parent); }
 }
