@@ -1,5 +1,6 @@
 package net.sprocketgames.lagsense;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.sprocketgames.lagsense.client.*;
 import java.util.*;
 import net.minecraft.client.input.*;
@@ -32,9 +33,9 @@ final class ResultsUsabilityChecks {
         list.virtual(rows,list.anchor());require(scroll.offset()==34*1234+5,"Collapsing restores the same content anchor");
         list.restore(Integer.MAX_VALUE);require(list.visible(19999)&&list.widgetCount()<=10,"All retained results are reachable without pagination");
         list.virtual(List.of(),list.anchor());require(scroll.offset()==0&&list.widgetCount()==0,"Empty filters release virtual widgets and clamp scrolling");
-        list.virtual(rows,null);require(list.mouseClicked(new MouseButtonEvent(670,230,new MouseButtonInfo(0,0)),false),"Scrollbar track accepts a native click");
+        list.virtual(rows,null);require(list.mouseClicked(new MouseButtonEvent(670,230,new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT,0)),false),"Scrollbar track accepts a native click");
         require(scroll.offset()>0&&list.widgetCount()<=10,"Track click keeps widgets bounded");
-        list.mouseReleased(new MouseButtonEvent(670,230,new MouseButtonInfo(0,0)));
+        list.mouseReleased(new MouseButtonEvent(670,230,new MouseButtonInfo(InputConstants.MOUSE_BUTTON_LEFT,0)));
         var index=new VirtualListIndex(List.of("a","b","c"),new int[]{34,500,34});
         require(index.at(33)==0&&index.at(34)==1&&index.at(533)==1&&index.at(534)==2,"Variable-height details share one continuous index");
     }
