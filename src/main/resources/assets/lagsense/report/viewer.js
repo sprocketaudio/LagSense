@@ -38,12 +38,18 @@
     pageSize: 100,
     expanded: new Set(),
   };
+  const dismissedNotices = new Set();
+  const notices = make("div", null, "capture-notices");
+  notices.id = "notices";
+  notices.setAttribute("aria-live", "polite");
+  let limitations = [];
   let meta,
     worker,
     token = 0,
     pending = new Map(),
     latestQuery = 0,
     selected = null,
+    detailOpener = null,
     lastRows = [],
     mapState = { x: 0, z: 0, scale: 14 },
     mapToken = 0,
@@ -111,12 +117,7 @@
       make("strong", "Could not open report"),
       make("p", String(error)),
     );
-    $("notices").append(box);
-  }
-  function notice(title, text) {
-    const box = make("div", null, "notice");
-    box.append(make("strong", title), make("p", text));
-    $("notices").append(box);
+    $("report-error").replaceChildren(box);
   }
   function options(id, items, value) {
     const element = $(id);
@@ -170,35 +171,121 @@
     section.append(ul);
     return section;
   }
+  function captureLimitations(s) {
+    const results = [];
+    const add = (id, title, text, critical = false, jvmDepth = 0) =>
+      results.push({ id, title, text, critical, jvmDepth });
+    if (s.truncated || s.incomplete || s.presentationLimited) {
+      const critical = s.truncated && (num(s.ticks) < 1 || s.targets === 0);
+      add("capture", critical ? "Capture has too little data" : "Incomplete capture data",
+        critical ? "Use a fresh capture to assess targets or hotspots."
+          : s.presentationLimited ? "This comparison is a preview. Some results may be missing."
+          : "Some measurements are missing. Treat totals and rankings as partial.", critical);
+    }
+    const notes = s.notes || [];
+    const unavailable = [s.serverState, s.backgroundState, s.kind === "cpu" ? s.state : null]
+      .includes("unavailable");
+    const recordingGap = notes.some((note) => note.startsWith("CPU results limited: some of the sampling period is missing"));
+    const cpu = s.serverSampling?.limits;
+    const onlyJVM = num(cpu?.jvmTruncatedStacks) > 0 &&
+      !num(cpu?.shortenedStacks) && !num(cpu?.omittedPaths) && !num(cpu?.omittedEdges) &&
+      !s.backgroundLimited && !unavailable && !recordingGap;
+    if (s.serverLimited || s.backgroundLimited || (s.kind === "cpu" && s.limited) || unavailable || recordingGap) {
+      const samples = s.kind === "cpu" ? s.samples : s.serverSamples;
+      const shortened = integer(cpu?.jvmTruncatedStacks);
+      const stackCount = num(samples) > 0 ? `${shortened} of ${integer(samples)}` : shortened;
+      add("sampling", "CPU sampling limitation", onlyJVM
+        ? `The JVM shortened ${stackCount} sampled stacks. Deeper calls may be missing from Call paths. Direct timings are unaffected.`
+        : unavailable
+          ? "Some CPU samples are unavailable. The sampled breakdown may be incomplete."
+          : "Some samples or call paths could not be saved. Treat the sampled breakdown as partial.",
+        false, onlyJVM ? Math.max(128, num(cpu.depth)) : 0);
+    }
+    if (s.callbackState === "unavailable" ||
+        notes.some((note) => /^(Event (results|timings) limited:|Detailed callback limit reached)/.test(note))) {
+      add("events", "Event timings limited",
+        "Some event timings are unavailable. Use the retained timings as a partial breakdown.");
+    }
+    if (s.chunkPartial) {
+      add("chunk", "Incomplete chunk details",
+        `This file shows ${integer(s.targets)} of ${integer(s.chunkTargets)} results. The chunk total also includes work whose details are missing.`);
+    }
+    return results;
+  }
+  function appendNoticeText(parent, { title, text, jvmDepth }) {
+    parent.append(make("strong", title), make("p", text));
+    if (!jvmDepth) return;
+    const remedy = make("div", null, "notice-remedy");
+    remedy.append(
+      make("p", "For deeper call stacks, add this JVM argument to Minecraft or your server:"),
+      make("code", `-XX:FlightRecorderOptions=stackdepth=${jvmDepth}`),
+    );
+    parent.append(remedy);
+  }
   function showNotices() {
-    const s = meta.summary;
-    $("notices").replaceChildren();
-    if (s.truncated || s.incomplete || s.presentationLimited)
-      notice(
-        "Incomplete capture data",
-        s.presentationLimited
-          ? "The original comparison was a limited preview."
-          : s.truncated
-            ? "Some measurements are missing because capture or report limits were reached."
-            : "At least one capture is incomplete, so a missing result does not mean the object was removed.",
-      );
-    for (const text of s.notes || s.limits || []) notice("Capture note", text);
-    if (s.backgroundLimited)
-      notice(
-        "Background samples incomplete",
-        s.backgroundReason ||
-          "Some background samples could not be saved because a capture limit was reached.",
-      );
-    if (s.serverLimited || (s.kind === "cpu" && s.limited))
-      notice(
-        "Call paths incomplete",
-        "Some call paths could not be saved because a capture limit was reached.",
-      );
-    if (s.chunkPartial)
-      notice(
-        "Incomplete chunk details",
-        `This file has details for ${integer(s.targets)} of ${integer(s.chunkTargets)} results in this chunk. Its total includes results whose details are missing.`,
-      );
+    const indicator = $("capture-limitations");
+    const critical = limitations.some((notice) => notice.critical);
+    indicator.hidden = !limitations.length || (state.view === "summary" && !dismissedNotices.size);
+    indicator.classList.toggle("critical", critical);
+    indicator.firstElementChild.textContent = critical ? "Critical capture limitation" : "Capture limitations";
+    indicator.lastElementChild.replaceChildren(...limitations.map((notice) => {
+      const item = make("li");
+      appendNoticeText(item, notice);
+      return item;
+    }));
+    notices.replaceChildren();
+    if (state.view !== "summary") return;
+    for (const notice of limitations) {
+      const { id, title, critical } = notice;
+      if (dismissedNotices.has(id)) continue;
+      const box = make("div", null, critical ? "notice error" : "notice");
+      const body = make("div");
+      appendNoticeText(body, notice);
+      const dismiss = make("button", "×", "notice-dismiss");
+      dismiss.type = "button";
+      dismiss.setAttribute("aria-label", "Dismiss " + title);
+      dismiss.onclick = () => {
+        dismissedNotices.add(id);
+        showNotices();
+        indicator.firstElementChild.focus();
+      };
+      box.append(body, dismiss);
+      notices.append(box);
+    }
+  }
+  function appendSamplingDetails(panel, s) {
+    const detail = s.serverSampling;
+    const notes = [...new Set([...(s.notes || s.limits || []), s.backgroundReason].filter(Boolean))];
+    if (!detail && !notes.length && s.backgroundOmitted == null) return;
+    const disclosure = make("details", null, "diagnostic-details");
+    disclosure.append(make("summary", detail ? "Sampling details" : "Capture notes"));
+    if (detail) {
+      const l = detail.limits;
+      disclosure.append(metadata([
+        ["Retained methods", integer(detail.methods)],
+        ["Retained nodes", integer(Math.max(0, detail.nodes - 1))],
+        ["Retained relationships", integer(detail.relationships)],
+        ["Stack limit", integer(l.depth) + " frames"],
+        ["Effective memory budget", number(num(l.budget) / 1048576, 1) + " MiB"],
+        ["Configured budget", number(num(l.configured) / 1048576, 1) + " MiB (" + l.mode + ")"],
+        ["Omitted path observations", integer(l.omittedPaths)],
+        ["Omitted relationships", integer(l.omittedEdges)],
+        ["Stacks over retained depth", integer(l.shortenedStacks)],
+        ["Stacks shortened by the JVM", integer(l.jvmTruncatedStacks)],
+      ]));
+    }
+    if (s.backgroundOmitted != null) {
+      disclosure.append(metadata([
+        ["Background threads sampled", integer(s.backgroundThreads)],
+        ["Background observations omitted", integer(s.backgroundOmitted)],
+      ]));
+    }
+    if (notes.length) {
+      const list = make("ul");
+      list.append(...notes.map((note) => make("li", note)));
+      disclosure.append(list);
+    }
+    panel.append(disclosure);
   }
   function renderOverview() {
     const s = meta.summary,
@@ -206,6 +293,7 @@
     overview.replaceChildren();
     const stats = make("div", null, "summary-stats"),
       grid = make("div", null, "summary-grid");
+    if (s.kind === "profile" && s.admin) grid.classList.add("server-summary-grid");
     if (s.kind === "comparison") {
       $("report-title").textContent = "What changed?";
       $("capture-context").textContent =
@@ -238,6 +326,7 @@
         ]),
       );
       info.classList.add("wide");
+      appendSamplingDetails(info, s);
       grid.append(info);
       const explore = block("Investigate changes");
       for (const [view, label] of [
@@ -272,6 +361,7 @@
           ],
         ]),
       );
+      appendSamplingDetails(info, s);
       grid.append(info);
     } else if (s.kind === "frames") {
       $("report-title").textContent = "Client frame profile";
@@ -408,6 +498,37 @@
         ]),
       );
       grid.append(info);
+      if (s.admin && s.kind === "profile") {
+        const activity = block("Server Activity");
+        const sample = s.activity;
+        const counts = sample?.total;
+        const status = counts
+          ? num(counts.peakPlayers) === 0 && num(counts.peakTicking) === 0
+            ? "Idle"
+            : "Active"
+          : "Unknown";
+        activity.append(make("p", `${status} · ${s.health || "Insufficient Data"}`));
+        if (counts) {
+          const breakdown = (row) => [
+            ["Loaded chunks (avg / peak)", `${number(row.averageLoaded, 1)} / ${integer(row.peakLoaded)}`],
+            ["Ticking chunks (avg / peak)", `${number(row.averageTicking, 1)} / ${integer(row.peakTicking)}`],
+            ["Force-loaded chunks (peak)", integer(row.peakForced)],
+          ];
+          activity.append(
+            metadata([["Online players (peak)", integer(counts.peakPlayers)], ...breakdown(counts)]),
+            make("p", `${integer(counts.samples)} observations across this capture at ${integer(sample.intervalTicks)}-tick intervals, including capture endpoints. Peaks are sampled.`, "muted"),
+          );
+          if (sample.dimensions?.length) {
+          const dimensions = make("details", null, "diagnostic-details");
+            dimensions.append(make("summary", "By dimension"));
+            for (const level of sample.dimensions) {
+              dimensions.append(make("h4", level.id), metadata(breakdown(level.counts)));
+            }
+            activity.append(dimensions);
+          }
+        }
+        grid.append(activity);
+      }
       if (s.coverage) {
         const c = s.coverage,
           total = num(c.totalNanos),
@@ -415,54 +536,37 @@
           bar = make("div", null, "coverage-bar"),
           legend = make("div", null, "coverage-legend");
         const pieces = [
-          [
-            "Targets only",
-            num(c.targetNanos) - num(c.overlapNanos),
-            colour("accent"),
-          ],
-          [
-            "Events only",
-            num(c.eventNanos) - num(c.overlapNanos),
-            colour("secondary"),
-          ],
-          [
-            "Time shared by targets and events",
-            num(c.overlapNanos),
-            colour("buttonLight"),
-          ],
-          ["Other server time", num(c.outsideNanos), colour("muted")],
+          ["targets", "Targets only", "Targets", num(c.targetNanos) - num(c.overlapNanos)],
+          ["events", "Events only", "Events", num(c.eventNanos) - num(c.overlapNanos)],
+          ["shared", "Time shared by targets and events", "Shared", num(c.overlapNanos)],
+          ["other", "Other server time", "Other", num(c.outsideNanos)],
         ];
-        for (const [name, value, color] of pieces) {
-          const segment = make("span");
-          segment.style.width =
-            (total > 0 ? (Math.max(0, value) / total) * 100 : 0) + "%";
-          segment.style.backgroundColor = color;
-          segment.title = `${name}: ${number(value / 1e6 / Math.max(1, num(s.ticks)))} ms/t`;
-          bar.append(segment);
-          const label = make("span"),
-            swatch = make("span", null, "swatch");
-          swatch.style.backgroundColor = color;
-          label.append(swatch, document.createTextNode(name));
-          legend.append(
-            label,
-            make(
-              "span",
-              number(value / 1e6 / Math.max(1, num(s.ticks))) + " ms/t",
-              "mono",
-            ),
-            make(
-              "span",
-              number(total > 0 ? (value / total) * 100 : 0, 1) + "%",
-              "mono",
-            ),
-          );
+        bar.setAttribute("aria-hidden", "true");
+        for (const [kind, name, shortName, value] of pieces) {
+          const share = total > 0 ? Math.max(0, value) / total * 100 : 0;
+          const time = number(value / 1e6 / Math.max(1, num(s.ticks))) + " ms/t";
+          if (share > 0) {
+            const segment = make("span", null, "coverage-segment coverage-" + kind);
+            segment.style.width = share + "%";
+            segment.title = `${name}: ${time} · ${number(share, 1)}%`;
+            if (share >= 25) {
+              segment.append(make("span", shortName, "coverage-segment-name"),
+                make("span", number(share, 0) + "%"));
+            }
+            bar.append(segment);
+          }
+          const label = make("span");
+          label.append(make("span", null, "swatch coverage-" + kind), document.createTextNode(name));
+          const cells = [label, make("span", time, "mono"), make("span", number(share, 1) + "%", "mono")];
+          if (share === 0) for (const cell of cells) cell.classList.add("coverage-zero");
+          legend.append(...cells);
         }
         coverage.append(
           bar,
           legend,
           make(
             "p",
-            "Time measured in both targets and events is counted once.",
+            "Shared work is counted once. Other server time is outside the measured targets and events.",
             "metric-note",
           ),
         );
@@ -477,6 +581,27 @@
           ),
         );
         grid.append(unavailable);
+      }
+      if (s.admin && s.kind === "profile") {
+        const sampling = block("Captured diagnostics");
+        sampling.append(
+          metadata([
+            ["Timed event handlers", integer(s.events)],
+            [
+              "Server Java execution samples",
+              s.serverSamples == null ? "Not recorded" : integer(s.serverSamples),
+            ],
+            [
+              "Background Java execution samples",
+              s.backgroundSamples == null ? "Not recorded" : integer(s.backgroundSamples),
+            ],
+            ["Server sampling state", s.serverState || "Not recorded"],
+            ["Background sampling state", s.backgroundState || "Not recorded"],
+            ["Event timing state", s.callbackState || "Not recorded"],
+          ]),
+        );
+        appendSamplingDetails(sampling, s);
+        grid.append(sampling);
       }
       grid.append(
         summaryList("Highest measured targets", s.topTargets || [], (item) => {
@@ -494,29 +619,8 @@
           loadRows();
         }),
       );
-      if (s.kind !== "chunk") {
-        const sampling = block("Captured diagnostics");
-        sampling.classList.add("wide");
-        sampling.append(
-          metadata([
-            ["Timed event handlers", s.events],
-            [
-              "Server Java execution samples",
-              s.serverSamples ?? "Not recorded",
-            ],
-            [
-              "Background Java execution samples",
-              s.backgroundSamples ?? "Not recorded",
-            ],
-            ["Server sampling state", s.serverState || "Not recorded"],
-            ["Background sampling state", s.backgroundState || "Not recorded"],
-            ["Event timing state", s.callbackState || "Not recorded"],
-          ]),
-        );
-        grid.append(sampling);
-      }
     }
-    overview.append(stats, grid);
+    overview.append(stats, notices, grid);
   }
   function navigation() {
     const views =
@@ -576,6 +680,7 @@
     state.sort = "cost";
     state.expanded.clear();
     selected = null;
+    detailOpener = null;
     $("selection").hidden = true;
     $("search").value = "";
     state.scope = meta.kind === "cpu" ? "capture" : "server";
@@ -586,6 +691,8 @@
       );
     $("overview").hidden = view !== "summary";
     $("explorer").hidden = view === "summary";
+    $("capture-limitations").open = false;
+    showNotices();
     if (view !== "summary") {
       controls();
       loadRows();
@@ -831,7 +938,7 @@
         details = make("button", "Details");
       details.type = "button";
       details.setAttribute("aria-label", "Details for " + row.name);
-      details.onclick = () => showDetail(row.id);
+      details.onclick = () => showDetail(row.id, details);
       actions.append(details);
       if (row.tp) {
         const copy = make("button", "Copy TP Command");
@@ -864,10 +971,11 @@
     $("empty").textContent = response.empty || "No matching results.";
     $("results").hidden = count === 0;
   }
-  async function showDetail(id) {
+  async function showDetail(id, opener) {
     selected = id;
     const result = await request("detail", { id });
     if (!result || selected !== id) return;
+    detailOpener = opener;
     $("selection").hidden = false;
     $("detail-title").textContent = result.title;
     const fields = make("div");
@@ -927,6 +1035,8 @@
     $("detail-body").replaceChildren(fields);
     for (const row of $("result-rows").children)
       row.classList.toggle("selected", row.dataset.record === id);
+    $("selection").scrollIntoView({ block: "start", inline: "nearest" });
+    $("detail-title").focus({ preventScroll: true });
   }
   async function copyCommand(command, button) {
     try {
@@ -989,6 +1099,7 @@
     state.page = 0;
     state.expanded.clear();
     selected = null;
+    detailOpener = null;
     $("selection").hidden = true;
     loadRows();
     if (state.view === "map") fitMap();
@@ -1049,6 +1160,8 @@
       $("selection").hidden = true;
       for (const row of $("result-rows").children)
         row.classList.remove("selected");
+      if (detailOpener?.isConnected) detailOpener.focus();
+      detailOpener = null;
     };
     $("map-fit").onclick = fitMap;
     $("map-plus").onclick = () => zoomMap(1.35);
@@ -1277,6 +1390,7 @@
       const loading = request("init", { raw });
       raw = null;
       meta = await loading;
+      limitations = captureLimitations(meta.summary);
       navigation();
       installControls();
       renderOverview();

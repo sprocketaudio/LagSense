@@ -205,7 +205,7 @@ public final class CoverageAuditMod {
         var defaults=Profiler.settings;Profiler.settings=new ServerSettings(defaults.timer(),defaults.spikes(),false,defaults.history(),defaults.discord(),defaults.backups(),true,true);
         if(Profiler.delivery!=null)Profiler.delivery.close();
         var section=new ServerSettings.Delivery(true,0,5,0,0,"either","target","html","","degraded");
-        var discord=new ServerSettings.Discord(true,"https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwx","Audit server",section,section,section,128);
+        var discord=new ServerSettings.Discord(true,"https://discord.com/api/webhooks/123456789012345678/abcdefghijklmnopqrstuvwx","Audit server",section,section,section);
         var sleeper=Class.forName("net.sprocketgames.lagsense.DiscordDelivery$Sleeper");
         var constructor=DiscordDelivery.class.getDeclaredConstructor(ServerSettings.Discord.class,DiscordDelivery.Transport.class,sleeper,java.util.function.Consumer.class);constructor.setAccessible(true);
         var noSleep=java.lang.reflect.Proxy.newProxyInstance(sleeper.getClassLoader(),new Class<?>[]{sleeper},(p,m,args)->null);
@@ -245,9 +245,15 @@ public final class CoverageAuditMod {
         var report=Profiler.latest;var entries=report.entries();require(report.ticks()>20,"Capture has multiple real server ticks");
         var performance=report.diagnostics().performance();require(performance!=null&&performance.valid()&&performance.measuredTicks()==report.ticks()&&Math.abs(report.tps()-performance.averageTps())<1e-9,"Actual tick-period counters survive JFR enrichment without changing the measurement interval");
         require(performance.peakNanos()/1e6>=report.mspt()&&performance.windows()>0&&performance.durationSeconds()>0,"Real capture records peak work, valid TPS windows and actual duration");
+        var activity=report.diagnostics().activity();
+        require(activity!=null&&activity.total().samples()>1&&activity.total().peakPlayers()==0&&activity.total().peakForced()>=2
+            &&activity.total().peakLoaded()>=activity.total().peakTicking()&&activity.total().peakTicking()>0&&!activity.idle(),
+            "Real multi-dimension force-loaded chunks are observed during a capture without players");
         String sent=discordHtml.get();require(sent!=null&&sent.contains("<!doctype html>")&&sent.contains("LagSense | Manual Capture")&&sent.contains(Long.toString(report.id()))&&!sent.contains("CPU sample analysis pending."),"Automatic delivery waits for the actual completed CPU-enriched capture and attaches its full HTML");
         String marker="<script id=\"report-data\" type=\"application/json\">";int first=sent.indexOf(marker)+marker.length(),last=sent.indexOf("</script>",first);
         var document=com.google.gson.JsonParser.parseString(sent.substring(first,last)).getAsJsonObject();var exported=Profiler.JSON.fromJson(document.get("data"),Report.class);
+        require(activity.equals(exported.diagnostics().activity())&&sent.contains("Server Activity")&&sent.contains("Active · "),
+            "The Discord summary and offline HTML attachment use the same sampled server activity");
         require(exported.id()==report.id()&&exported.entries().equals(report.entries())&&exported.diagnostics().callbacks().equals(report.diagnostics().callbacks())&&exported.diagnostics().cpu().equals(report.diagnostics().cpu())&&exported.diagnostics().background().equals(report.diagnostics().background())&&exported.diagnostics().performance().equals(performance),"The actual Discord attachment contains every retained target, event handler, server/background call path and exact performance interval");
         System.out.println("Discord server integration passed: measured interval/peak/window counters, sampler enrichment, shared automatic delivery, same capture identity and complete offline HTML; mock transport only.");
         require(shortcutStopped&&!report.recording()&&report.secondsRemaining()==0&&report.id()==shortcutDeadline&&deadline()==shortcutDeadline,"Early stop produces a completed normal report without replacing its capture identity");

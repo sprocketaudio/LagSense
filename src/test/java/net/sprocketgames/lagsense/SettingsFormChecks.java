@@ -23,7 +23,8 @@ final class SettingsFormChecks {
         var edits=ServerSettingsForms.changes("advanced",configured,edit);
         require(edits.size()==10&&edits.keySet().stream().noneMatch(k->k.startsWith("discord")||k.startsWith("history")||k.startsWith("capture.timer")),"Advanced saves only its allowed five fields even when another section is modified in the request");
         var delivery=new ServerSettings.Delivery(true,120,3,2.5,10,"both","both","csv","123456789012345678","warning");
-        var discord=new ServerSettingsForms.Discord(true,true,"Changed",delivery,view.discord().spikes(),view.discord().manual());
+        var timerPolicy=new ServerSettings.TimerDelivery(false,375,2.5,true,true);
+        var discord=new ServerSettingsForms.Discord(true,true,"Changed",delivery,view.discord().spikes(),view.discord().manual(),"",timerPolicy);
         var discordEdit=new ServerSettingsForms.Edit(view,new ServerSettingsForms.View(advanced,discord),"");
         var discordEdits=ServerSettingsForms.changes("discord",configured,discordEdit);
         require(discordEdits.keySet().stream().allMatch(k->k.startsWith("discord."))&&!discordEdits.containsKey("discord.webhook_url"),"Blank webhook input preserves the current credential and unrelated settings");
@@ -39,6 +40,12 @@ final class SettingsFormChecks {
             var commit=new ServerSettingsForms.Edit(live,new ServerSettingsForms.View(live.advanced(),discord),"");
             var savedDiscord=ServerSettings.update(file,savedAdvanced,ServerSettingsForms.changes("discord",savedAdvanced,commit));
             require(savedDiscord.discord().enabled()&&savedDiscord.discord().timer().equals(delivery)&&savedDiscord.discord().webhookUrl().equals(webhook),"Discord delivery switches, filters, role and attachment save without changing the existing endpoint");
+            require(savedDiscord.discord().timerPolicy().equals(timerPolicy)&&ServerSettings.load(file).discord().timerPolicy().equals(timerPolicy),"Notification rules save and reload through the settings editor");
+            var policyView=ServerSettingsForms.view(savedDiscord);
+            require(gson.fromJson(gson.toJson(policyView),ServerSettingsForms.View.class).equals(policyView),"Custom notification rules survive the editor wire round trip");
+            require(ServerSettingsForms.changes("discord",savedDiscord,new ServerSettingsForms.Edit(policyView,policyView,"")).get("discord.timer.significant_peak_ms").equals(375.0),"Saving another Discord tab preserves custom notification rules");
+            var changedPolicy=ServerSettings.parse(Files.readString(file).replace("375.0","400.0"),Map.of());
+            try{ServerSettingsForms.changes("discord",changedPolicy,new ServerSettingsForms.Edit(policyView,policyView,""));throw new AssertionError("Stale notification rules accepted");}catch(IllegalArgumentException expected){}
             String before=Files.readString(file);
             try{ServerSettingsForms.changes("discord",savedDiscord,commit);throw new AssertionError("Stale page accepted");}catch(IllegalArgumentException expected){}
             require(Files.readString(file).equals(before),"Stale form conflict makes no file changes");

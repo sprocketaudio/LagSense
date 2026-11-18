@@ -25,6 +25,7 @@ public final class Profiler {
     private static boolean finishing, insideCycle,stopRequested;
     private static final TimingCoverage coverage = new TimingCoverage();
     private static final CapturePerformance.Counter performance=new CapturePerformance.Counter();
+    private static CaptureActivity.Counter activity;
     private static long captureEnded;private static String captureReason;
     private static Mutable hottest;
     private static final Map<Level,Map<UUID,Long2ObjectOpenHashMap<Mutable>>> entityMeasurements=new IdentityHashMap<>();
@@ -92,11 +93,12 @@ public final class Profiler {
         detector.configure(settings.spikes(), System.nanoTime()); schedule.configure(settings.timer(), System.nanoTime());
         store = new JsonStore(directory, JSON, e -> LagSense.LOG.error("LagSense data save failed", e));
         archives = new ArchiveService(server, directory, settings.history());
-        delivery = new DiscordDelivery(settings.discord(), message -> LagSense.LOG.warn("LagSense Discord: {}", message));
+        delivery = new DiscordDelivery(settings.discord(), directory.resolve("discord-scheduled.json"),
+            message -> LagSense.LOG.warn("LagSense Discord: {}", message));
         sampler = new ModTaskSampler(); investigations = new InvestigationService(server);reportDelivery=new ReportDelivery(server); refreshBackups();
     }
     public static void reset() {
-        active = false;finishing=false;stopRequested=false;insideCycle=false;coverage.reset();
+        active = false;finishing=false;stopRequested=false;insideCycle=false;coverage.reset();activity=null;
         if(reportDelivery!=null){reportDelivery.close();reportDelivery=null;}
         if (investigations != null) { investigations.close(); investigations = null; }
         if (callbacks != null) { callbacks.close(); callbacks = null; } callbackError = null;
@@ -172,6 +174,7 @@ public final class Profiler {
     }
     public static void start(ServerPlayer player, int seconds, String reason) {
         clearTargets(); budget.reset();finishing=false;stopRequested=false;ticks = 0; tickNanos = 0; bookkeepingNanos = 0; snapshotNanos = 0; truncated = false;
+        activity = new CaptureActivity.Counter();
         initiator = player == null ? null : player.getUUID(); trigger = reason;
         serverThread = Thread.currentThread(); started = System.nanoTime(); tickStart = started;
         deadline = started + seconds * 1_000_000_000L; active = true;performance.start(started);captureEnded=started;captureReason=reason.equals("Spike follow-up")?detector.reason():"";
@@ -222,8 +225,16 @@ public final class Profiler {
         }
         if (deferredTimer && !active && !finishing && !backupBlocked) { deferredTimer = false; schedule.configure(schedule.settings(), System.nanoTime()); start(null, schedule.settings().captureSeconds(), "Scheduled"); return; }
         if (!active && !finishing) return;
-                tickNanos += Math.max(0,ended-tickStart); ticks++;captureEnded=ended;performance.tick(ended,Math.max(0,ended-tickStart));
-        if (finishing || stopRequested || System.nanoTime() >= deadline) {
+        tickNanos += Math.max(0,ended-tickStart); ticks++;captureEnded=ended;performance.tick(ended,Math.max(0,ended-tickStart));
+        boolean complete = finishing || stopRequested || System.nanoTime() >= deadline;
+        if (activity != null && (complete || (ticks - 1) % CaptureActivity.INTERVAL_TICKS == 0)) {
+            try { ServerActivitySampler.sample(server, activity); }
+            catch (RuntimeException error) {
+                activity = null;
+                LagSense.LOG.warn("Capture activity counts unavailable: {}", error.getClass().getSimpleName());
+            }
+        }
+        if (complete) {
             latest = snapshot(); active = false;finishing=false;stopRequested=false;
             if (callbacks != null) { callbacks.close(); callbacks = null; }
             detector.captureFinished(System.nanoTime()); save("latest.json", latest);
@@ -250,6 +261,7 @@ public final class Profiler {
                 }
             }
             clearTargets();
+            activity = null;
         } else if (ticks % 20 == 0 && initiator != null) {
             ServerPlayer player = server.getPlayerList().getPlayer(initiator);
             if (player != null && LagSense.isAdmin(player.createCommandSourceStack()) && hasClient(player)) {
@@ -263,7 +275,6 @@ public final class Profiler {
             .sorted(Comparator.comparingLong(Report.Entry::nanos).reversed().thenComparing(Report.Entry::dimension)
                 .thenComparingInt(Report.Entry::x).thenComparingInt(Report.Entry::y).thenComparingInt(Report.Entry::z).thenComparing(Report.Entry::type)).toList();
         snapshotNanos += System.nanoTime() - assemblyStart;
-        int remaining = (int)Math.max(0, Math.ceil((deadline - System.nanoTime()) / 1_000_000_000.0));
         double tps = performance.finish(captureEnded,captureReason).averageTps();
         var notes = new ArrayList<String>();
         if (sampling != null) notes.add("CPU sample analysis pending.");
@@ -273,7 +284,7 @@ public final class Profiler {
         if (callbackError != null) notes.add(callbackError);
         if (callbacks != null && callbacks.incomplete()) notes.add(callbacks.limitation());
         return new Report(deadline, System.currentTimeMillis(), ticks, tickNanos / 1_000_000.0 / Math.max(1, ticks), true, truncated, entries,
-            !finishing && !stopRequested && remaining > 0, finishing||stopRequested?0:remaining, List.of(), tps, new Report.Diagnostics(trigger, bookkeepingNanos, snapshotNanos, List.of(), notes, callbacks == null ? List.of() : callbacks.snapshot(), callbackError != null ? "unavailable" : !captureDetailed ? "disabled" : "enabled", CpuInvestigation.empty(sampling == null ? "disabled" : "pending"),coverage.snapshot(),BackgroundCpu.empty(sampling==null?"disabled":"pending"),performance.finish(captureEnded,captureReason)));
+            false, 0, List.of(), tps, new Report.Diagnostics(trigger, bookkeepingNanos, snapshotNanos, List.of(), notes, callbacks == null ? List.of() : callbacks.snapshot(), callbackError != null ? "unavailable" : !captureDetailed ? "disabled" : "enabled", CpuInvestigation.empty(sampling == null ? "disabled" : "pending"),coverage.snapshot(),BackgroundCpu.empty(sampling==null?"disabled":"pending"),performance.finish(captureEnded,captureReason),activity==null?null:activity.snapshot()));
     }
     public static void refreshBackups() { backups.update(net.sprocketgames.lagsense.compat.BackupCompatibility.active(), System.nanoTime()); }
     public static String backupStatus() { refreshBackups(); return "Backups: " + backups.status(settings.backups(), System.nanoTime()); }

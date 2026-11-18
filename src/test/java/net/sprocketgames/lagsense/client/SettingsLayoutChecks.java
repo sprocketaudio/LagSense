@@ -15,7 +15,7 @@ final class SettingsLayoutChecks {
             var position=new OverlaySettingsScreen(null);set(position,"position",true);screens.add(position);
             screens.add(new CaptureSettingsScreen(null,new CaptureSettings(defaults.timer(),defaults.spikes()),""));
             var spikes=new CaptureSettingsScreen(null,new CaptureSettings(defaults.timer(),defaults.spikes()),"");set(spikes,"spikePage",true);screens.add(spikes);
-            for(String tab:List.of("Connection","Timer","Spikes","Manual")) {var screen=server("discord",defaults);set(screen,"tab",tab);screens.add(screen);}
+            for(String tab:List.of("Connection","Timer","Spikes","Manual","Settings")) {var screen=server("discord",defaults);set(screen,"tab",tab);screens.add(screen);}
             screens.add(server("advanced",defaults));
             var custom=server("advanced",defaults);var valuesField=ServerSettingsScreen.class.getDeclaredField("values");valuesField.setAccessible(true);((Map<String,String>)valuesField.get(custom)).put("resource","custom");screens.add(custom);
             Integer left=null,top=null,bottom=null;
@@ -58,6 +58,18 @@ final class SettingsLayoutChecks {
                         if(labels.stream().anyMatch(t->t.startsWith("Effective:")||t.startsWith("Safety ceilings")||t.contains("retained frames")))throw new AssertionError("Advanced does not repeat explanatory resource-budget text in the form");
                     }
                     var fields=body.stream().filter(w->w instanceof UiInput).toList();
+                    if(screen instanceof ServerSettingsScreen settings&&body.stream().anyMatch(w->w.getMessage().getString().equals("Scheduled notifications"))) {
+                        if(fields.size()!=2||body.stream().filter(UiButton.class::isInstance).count()!=3)throw new AssertionError("Notification Settings exposes both thresholds and all three switches");
+                        var values=(Map<String,String>)valuesField.get(settings);
+                        values.put("significantPeak","375.0");values.put("hotspot","2.5");values.put("idleNotice","true");
+                        values.put("timer.top","7");
+                        var desiredMethod=ServerSettingsScreen.class.getDeclaredMethod("desired");desiredMethod.setAccessible(true);
+                        var desired=(ServerSettingsForms.View)desiredMethod.invoke(settings);
+                        if(desired.discord().timerPolicy().significantPeakMs()!=375||!desired.discord().timerPolicy().idleNotice())throw new AssertionError("Settings controls populate the submitted notification rules");
+                        var reset=ServerSettingsScreen.class.getDeclaredMethod("loadTimerPolicy",ServerSettings.TimerDelivery.class);reset.setAccessible(true);reset.invoke(settings,defaults.discord().timerPolicy());
+                        desired=(ServerSettingsForms.View)desiredMethod.invoke(settings);
+                        if(!desired.discord().timerPolicy().equals(defaults.discord().timerPolicy())||desired.discord().timer().top()!=7)throw new AssertionError("Restoring notification defaults affects only the rules");
+                    }
                     if(!fields.isEmpty()) {
                         var last=fields.getLast();int initial=last.getY();list.restore(Integer.MAX_VALUE);var r=last.getRectangle();
                         if((viewport[1]>=424||viewport[1]>=360&&screen instanceof ServerSettingsScreen&&screen.getTitle().getString().equals("Advanced"))&&last.getY()!=initial)throw new AssertionError("Full settings panel must not force unnecessary scrolling");

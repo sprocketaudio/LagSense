@@ -13,11 +13,20 @@ public record ServerSettings(ProfileSchedule.Settings timer, SpikeDetector.Setti
                              ProfileArchive.Settings history, Discord discord, BackupMonitor.Settings backups, boolean modTasks, boolean detailedCallbacks, ProfilingLimits limits) {
     public ServerSettings {limits=limits==null?ProfilingLimits.defaults():limits;}
     public ServerSettings(ProfileSchedule.Settings timer,SpikeDetector.Settings spikes,boolean monitorEmptyServer,ProfileArchive.Settings history,Discord discord,BackupMonitor.Settings backups,boolean modTasks,boolean detailedCallbacks){this(timer,spikes,monitorEmptyServer,history,discord,backups,modTasks,detailedCallbacks,ProfilingLimits.defaults());}
-    public record Discord(boolean enabled, String webhookUrl, String serverName, Delivery timer, Delivery spikes, Delivery manual,int uploadLimitMiB,String avatarUrl) {
-        public Discord(boolean enabled,String webhookUrl,String serverName,Delivery timer,Delivery spikes,Delivery manual){this(enabled,webhookUrl,serverName,timer,spikes,manual,10,"");}
-        public Discord(boolean enabled,String webhookUrl,String serverName,Delivery timer,Delivery spikes,Delivery manual,int uploadLimitMiB){this(enabled,webhookUrl,serverName,timer,spikes,manual,uploadLimitMiB,"");}
-        public Discord { avatarUrl=validateAvatar(avatarUrl);if(uploadLimitMiB<1||uploadLimitMiB>128)throw new IllegalArgumentException("discord.upload_limit_mib must be 1–128.");Objects.requireNonNull(webhookUrl); if (serverName == null || serverName.isBlank() || serverName.length() > 80) throw new IllegalArgumentException("discord.server_name must have 1–80 characters."); }
+    public record Discord(boolean enabled, String webhookUrl, String serverName, Delivery timer, Delivery spikes, Delivery manual,String avatarUrl,TimerDelivery timerPolicy) {
+        public Discord(boolean enabled,String webhookUrl,String serverName,Delivery timer,Delivery spikes,Delivery manual){this(enabled,webhookUrl,serverName,timer,spikes,manual,"");}
+        public Discord(boolean enabled,String webhookUrl,String serverName,Delivery timer,Delivery spikes,Delivery manual,String avatarUrl){this(enabled,webhookUrl,serverName,timer,spikes,manual,avatarUrl,TimerDelivery.DEFAULT);}
+        public Discord { avatarUrl=validateAvatar(avatarUrl);Objects.requireNonNull(webhookUrl); Objects.requireNonNull(timerPolicy); if (serverName == null || serverName.isBlank() || serverName.length() > 80) throw new IllegalArgumentException("discord.server_name must have 1–80 characters."); }
         @Override public String toString() { return "Discord[enabled=" + enabled + ", webhook=<redacted>]"; }
+    }
+    public record TimerDelivery(boolean suppressRoutine, double significantPeakMs, double hotspotMsPerTick,
+                                boolean idleNotice, boolean dailyHeartbeat) {
+        static final TimerDelivery DEFAULT = new TimerDelivery(true, 250, 5, false, false);
+        public TimerDelivery {
+            if (!Double.isFinite(significantPeakMs) || significantPeakMs < 0 || significantPeakMs > 60_000
+                || !Double.isFinite(hotspotMsPerTick) || hotspotMsPerTick < 0 || hotspotMsPerTick > 10_000)
+                throw new IllegalArgumentException("Invalid Discord timer peak or hotspot threshold.");
+        }
     }
     public record Delivery(boolean enabled, int cooldownSeconds, int top, double minimumMs, double minimumPercent,
                            String match, String groupBy, String attachment, String roleId, String mentionSeverity) {
@@ -44,6 +53,7 @@ public record ServerSettings(ProfileSchedule.Settings timer, SpikeDetector.Setti
         if (!parse(text, System.getenv()).equals(expected)) throw new IllegalArgumentException("Config changed on disk. Run /lagsense reload before applying in-game edits.");
         var file = new TomlParser().parse(text);
         values.forEach(file::set);
+        file.remove("discord.upload_limit_mib");
         for(String section:List.of("timer","spikes","manual")){
             String prefix="discord."+section+".";file.remove(prefix+"include_coordinates");file.remove(prefix+"group_repeats");
             if(file.contains(prefix+"top_offenders")&&!file.contains(prefix+"top_results"))file.set(prefix+"top_results",file.get(prefix+"top_offenders"));file.remove(prefix+"top_offenders");
@@ -79,7 +89,12 @@ public record ServerSettings(ProfileSchedule.Settings timer, SpikeDetector.Setti
         if (url.isBlank() && !env.isEmpty()) url = environment.getOrDefault(env, "");
         if (!url.isBlank()) validateWebhook(url);
         if (enabled && url.isBlank()) throw new IllegalArgumentException("Discord is enabled but no webhook is configured.");
-        var discord = new Discord(enabled, url, reader.string("discord.server_name", "Minecraft server"), delivery(reader, "timer", 0), delivery(reader, "spikes", 600), delivery(reader, "manual", 0),reader.integer("discord.upload_limit_mib",10),reader.string("discord.avatar_url",""));
+        var timerPolicy = new TimerDelivery(reader.bool("discord.timer.suppress_routine",true),
+            reader.number("discord.timer.significant_peak_ms",TimerDelivery.DEFAULT.significantPeakMs()),
+            reader.number("discord.timer.hotspot_ms_per_tick",TimerDelivery.DEFAULT.hotspotMsPerTick()),
+            reader.bool("discord.timer.idle_notice",false),reader.bool("discord.timer.daily_heartbeat",false));
+        reader.get("discord.upload_limit_mib",20); // Consume the obsolete option in existing files.
+        var discord = new Discord(enabled, url, reader.string("discord.server_name", "Minecraft server"), delivery(reader, "timer", 0), delivery(reader, "spikes", 300), delivery(reader, "manual", 0),reader.string("discord.avatar_url",""),timerPolicy);
         reader.checkKnown(file, "");
         return new ServerSettings(timer, spikes, empty, history, discord, backups, modTasks, detailedCallbacks,limits);
     }
@@ -110,10 +125,10 @@ public record ServerSettings(ProfileSchedule.Settings timer, SpikeDetector.Setti
         String p = "discord." + name + ".";
         reader.bool(p+"include_coordinates",false); // Accept obsolete files, without retaining or applying the removed option.
         reader.bool(p+"group_repeats",false); // Consume legacy keys without retaining obsolete behaviour.
-        int legacyTop=reader.integer(p+"top_offenders",5);
+        int legacyTop=reader.integer(p+"top_offenders",name.equals("timer")?3:5);
         return new Delivery(reader.bool(p + "enabled", false), reader.integer(p + "cooldown_seconds", cooldown), reader.integer(p + "top_results", legacyTop),
-            reader.number(p + "minimum_ms_per_tick", 0), reader.number(p + "minimum_tick_percent", 0), reader.string(p + "match", "either"), reader.string(p + "group_by", "target"),
-            reader.string(p + "attachment", "none"), reader.string(p + "mention_role_id", ""),reader.string(p+"mention_severity","degraded"));
+            reader.number(p + "minimum_ms_per_tick", 0), reader.number(p + "minimum_tick_percent", 0), reader.string(p + "match", "either"), reader.string(p + "group_by", "both"),
+            reader.string(p + "attachment", "html"), reader.string(p + "mention_role_id", ""),reader.string(p+"mention_severity",name.equals("manual")?"never":"degraded"));
     }
     public static String template() {
         try (InputStream input = ServerSettings.class.getResourceAsStream("/lagsense-server.toml")) {

@@ -133,9 +133,10 @@ public final class UiHints {
     }
     static String discordTab(String name){return switch(name){
         case "Connection"->"Configure Discord webhook notifications.";
-        case "Timer"->"Run profiles at a fixed interval.";
-        case "Spikes"->"Start a follow-up profile when a configured threshold is reached.";
+        case "Timer"->"Configure notifications for scheduled profiles.";
+        case "Spikes"->"Configure notifications for spike follow-up profiles.";
         case "Manual"->"Configure notifications for manually started profiles.";
+        case "Settings"->"Configure routine suppression, peak and hotspot alerts, idle notices and heartbeat for scheduled notifications.";
         default->null;
     };}
 }

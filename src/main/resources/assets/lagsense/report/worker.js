@@ -1,5 +1,5 @@
 "use strict";
-let documentData,
+let documentData, health,
   data,
   mode,
   entries = [],
@@ -16,6 +16,51 @@ let roots = [],
   cpuChildren = new Map();
 const num = (v) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 const list = (v) => (Array.isArray(v) ? v : []);
+function expandEntryRows(document) {
+  if (document.format !== 2) return;
+  const strings = document.strings;
+  if (!Array.isArray(strings)) throw Error("Report string dictionary is missing.");
+  const stringAt = (index) => {
+    if (index === null) return null;
+    if (!Number.isInteger(index) || typeof strings[index] !== "string")
+      throw Error("Report entry has an invalid string reference.");
+    return strings[index];
+  };
+  const entry = (row) => {
+    if (!Array.isArray(row)) return row;
+    if (row.length < 8 || row.length > 10)
+      throw Error("Report entry has an invalid row length.");
+    const result = {
+      kind: stringAt(row[0]),
+      type: stringAt(row[1]),
+      dimension: stringAt(row[2]),
+      x: row[3],
+      y: row[4],
+      z: row[5],
+      nanos: row[6],
+      calls: row[7],
+    };
+    if (row.length > 8 && row[8] !== null) result.entityId = row[8];
+    if (row.length > 9 && row[9] !== null) result.locationKnown = row[9];
+    return result;
+  };
+  const entries = (rows) => {
+    if (Array.isArray(rows))
+      for (let i = 0; i < rows.length; i++) rows[i] = entry(rows[i]);
+  };
+  const data = document.data;
+  if (document.kind === "profile") {
+    entries(data.entries);
+    for (const chunk of list(data.chunks))
+      if (chunk.hotspot) chunk.hotspot = entry(chunk.hotspot);
+  } else if (document.kind === "comparison") {
+    entries(data.details?.earlier);
+    entries(data.details?.later);
+  } else if (document.kind === "chunk") {
+    for (const hotspot of list(data.hotspots))
+      hotspot.entry = entry(hotspot.entry);
+  }
+}
 const key = (...parts) => JSON.stringify(parts);
 const micro = (n, t = tickCount) => (t > 0 ? num(n) / 1000 / t : null);
 const located = (e) =>
@@ -1060,6 +1105,15 @@ function query(q) {
   const result = flattenPage(q);
   return { ...result, empty: emptyMessage(q), view: q.view };
 }
+function samplingDetails(cpu) {
+  if (!cpu || !cpu.limits) return null;
+  return {
+    methods: list(cpu.methods).length,
+    nodes: list(cpu.nodes).length,
+    relationships: list(cpu.edges).length,
+    limits: cpu.limits,
+  };
+}
 function overview() {
   if (mode === "comparison")
     return {
@@ -1087,6 +1141,7 @@ function overview() {
       retained: data.treeSamples,
       limited: data.limited,
       state: data.state,
+      serverSampling: samplingDetails(data),
     };
   if (mode === "frames") return { kind: mode, ...data };
   const diag = data.diagnostics || {};
@@ -1117,15 +1172,20 @@ function overview() {
     notes: list(diag.notes),
     trigger: diag.trigger,
     coverage: diag.coverage,
+    activity: mode === "profile" && data.admin ? diag.activity : null,
+    health: mode === "profile" && data.admin ? health : null,
     callbackState: diag.callbackState,
     events: list(diag.callbacks).length,
     serverSamples: diag.cpu?.samples,
     serverLimited: diag.cpu?.limited,
+    serverSampling: samplingDetails(diag.cpu),
     serverState: diag.cpu?.state,
     backgroundSamples: diag.background?.samples,
     backgroundLimited: diag.background?.limited,
     backgroundReason: diag.background?.reason,
     backgroundState: diag.background?.state,
+    backgroundOmitted: diag.background?.omittedSamples,
+    backgroundThreads: list(diag.background?.threads).length,
     unlocated: entries.filter((e) => !located(e)).length,
     topTargets: top.map((i) => ({
       name: entries[i].type,
@@ -1262,8 +1322,10 @@ onmessage = function (event) {
     let result;
     if (cmd === "init") {
       documentData = JSON.parse(event.data.raw);
+      expandEntryRows(documentData);
       mode = documentData.kind;
       data = documentData.data;
+      health = documentData.health;
       documentData = null;
       if (mode === "profile") entries = list(data.entries);
       else if (mode === "chunk")

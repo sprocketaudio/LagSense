@@ -36,9 +36,31 @@ and slowdowns. Saved reports remain available after server restarts.
 
 ### Discord reporting
 
-Send performance summaries containing TPS, MSPT, severity, expensive contributors
+Send performance summaries containing TPS, MSPT, severity, measured contributors
 and chunks. Configure role mentions by severity and optionally attach one complete
-HTML, JSON or CSV report. Attachments default to None.
+HTML, JSON or CSV report. New configurations default to three results per Timer
+section and five per Spikes/Manual section, showing both individuals and combined
+types. Timer, Spikes and Manual all default to HTML attachments.
+Existing saved preferences are preserved. If a file cannot be generated or exceeds
+the fixed 20 MiB attachment limit or Discord's accepted size, the summary still sends
+with an attachment notice.
+
+Discord and offline HTML reports show server activity alongside performance.
+LagSense observes loaded and block-tick-eligible chunks on the first and final
+captured ticks and every 20 ticks in between. The averages and peaks describe
+those observations. Force-loaded counts come from the server's forced-ticket
+set. HTML includes a per-dimension breakdown. A capture with zero measured
+targets can still show active chunks.
+
+Scheduled Discord delivery suppresses routine healthy reports by default.
+Captures and configured local history continue. Warnings, degradation, large
+tick peaks and newly significant groups can still trigger a message, subject to
+the scheduled delivery cooldown. Configure these rules in Discord's Settings tab
+or the server TOML. Turn off Suppress routine to send every scheduled report.
+Idle transition notices and the 24-hour quiet heartbeat are optional and off by
+default. Spike delivery defaults to a 300-second cooldown for matching severity,
+trigger kind and leading measured areas. Significant peak notes identify a tick
+spike separately from the capture's overall health rating.
 
 Reports can also be exported as standalone interactive HTML files that work
 offline, without an external website or account. In-game reports include search,

@@ -47,32 +47,36 @@ webhook_url = "" # Secret HTTPS discord.com incoming webhook; never put in chat.
 webhook_url_env = "LAGSENSE_DISCORD_WEBHOOK" # Optional environment fallback.
 server_name = "Minecraft server"
 avatar_url = "" # Optional public HTTPS image URL.
-upload_limit_mib = 10 # Set to the attachment allowance for this webhook destination (1–128).
 
 # Each delivery section is independent. Delivery never enables capture.
-# Timer: each completed scheduled capture, independent of spike thresholds/cooldown.
+# Timer: evaluate each completed scheduled capture, independent of spike delivery.
 [discord.timer]
 enabled = false
+suppress_routine = true # false sends all completed scheduled captures, subject to cooldown.
+significant_peak_ms = 250.0 # Send a report for an isolated peak at or above this time. 0 disables this trigger.
+hotspot_ms_per_tick = 5.0 # Send for a newly significant kind/type/dimension group. 0 disables this trigger.
+idle_notice = false # Optional one-time notice after observed activity goes idle.
+daily_heartbeat = false # Optional brief notice after 24 hours without a delivered report.
 cooldown_seconds = 0 # 0 = every qualifying timer result; 0–86400.
-top_results = 5 # 1–10 results per contributor section and chunks.
+top_results = 3 # 1–10 results per contributor section and chunks.
 minimum_ms_per_tick = 0.0 # 0 disables this filter; average cost per captured tick.
 minimum_tick_percent = 0.0 # 0 disables; percentage of ACTUAL measured tick work.
 match = "either" # either / both; considers only enabled (nonzero) filters.
-group_by = "target" # target / type / both. Types combine kind, registry ID and dimension.
-attachment = "none" # none / html / json / csv. Sends at most one report file.
+group_by = "both" # target / type / both. Types combine kind, registry ID and dimension.
+attachment = "html" # none / html / json / csv. Sends at most one report file.
 mention_severity = "degraded" # never / critical / degraded / warning / always.
 mention_role_id = "" # Optional numeric role ID.
 
-# Spike delivery has its own cooldown and filters.
+# Spike delivery has its own filters and cooldown per observed problem signature.
 [discord.spikes]
 enabled = false
-cooldown_seconds = 600
+cooldown_seconds = 300
 top_results = 5
 minimum_ms_per_tick = 0.0
 minimum_tick_percent = 0.0
 match = "either"
-group_by = "target"
-attachment = "none"
+group_by = "both"
+attachment = "html"
 mention_severity = "degraded"
 mention_role_id = ""
 
@@ -84,7 +88,7 @@ top_results = 5
 minimum_ms_per_tick = 0.0
 minimum_tick_percent = 0.0
 match = "either"
-group_by = "target"
-attachment = "none"
-mention_severity = "degraded"
+group_by = "both"
+attachment = "html"
+mention_severity = "never"
 mention_role_id = ""

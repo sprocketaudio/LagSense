@@ -109,6 +109,7 @@ public final class ProfileArchive implements AutoCloseable {
         if (report.diagnostics() != null) {
             var d = report.diagnostics();
             if(d.performance()!=null&&(!d.performance().valid()||d.performance().measuredTicks()!=report.ticks()))throw new IllegalArgumentException("Invalid capture performance measurements");
+            if(d.activity()!=null&&!d.activity().valid(report.ticks()))throw new IllegalArgumentException("Invalid capture activity measurements");
             CpuInvestigation.validate(d.cpu());
             BackgroundCpu.validate(d.background());
             if (!Set.of("disabled", "enabled", "ready", "unavailable", "legacy").contains(d.callbackState())) throw new IllegalArgumentException("Invalid callback state");

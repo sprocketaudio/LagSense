@@ -130,7 +130,7 @@ public final class ModTaskSampler implements AutoCloseable {
 
         if(analysis.recordingLimited())notes.add("CPU results limited: some of the sampling period is missing because recording data was lost or reached its storage limit.");
         if(!analysis.limitation().isBlank())notes.add("CPU results limited: "+analysis.limitation());
-        var diagnostics = new Report.Diagnostics(old.trigger(), old.bookkeepingNanos(), old.snapshotNanos(), analysis.tasks(), notes, old.callbacks(), old.callbackState(), analysis.cpu(),old.coverage(),analysis.background(),old.performance());
+        var diagnostics = new Report.Diagnostics(old.trigger(), old.bookkeepingNanos(), old.snapshotNanos(), analysis.tasks(), notes, old.callbacks(), old.callbackState(), analysis.cpu(),old.coverage(),analysis.background(),old.performance(),old.activity());
         return new Report(report.id(), report.capturedAt(), report.ticks(), report.mspt(), report.admin(), report.truncated(), report.entries(), report.recording(), report.secondsRemaining(), report.chunks(), report.tps(), diagnostics);
     }
     private void closeRecording(Session session) {

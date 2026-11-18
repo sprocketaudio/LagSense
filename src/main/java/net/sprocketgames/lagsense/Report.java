@@ -12,7 +12,8 @@ public record Report(long id, long capturedAt, int ticks, double mspt, boolean a
         public Callback(String owner,String event,String method,long nanos,long calls,long maxNanos){this(owner,event,method,nanos,calls,maxNanos,0);}
         public Callback(String owner, String event, String method, long nanos, long calls) { this(owner, event, method, nanos, calls, 0); }
     }
-    public record Diagnostics(String trigger, long bookkeepingNanos, long snapshotNanos, List<Task> tasks, List<String> notes, List<Callback> callbacks, String callbackState, CpuInvestigation cpu, TimingCoverage.Snapshot coverage, BackgroundCpu background,CapturePerformance performance) {
+    public record Diagnostics(String trigger, long bookkeepingNanos, long snapshotNanos, List<Task> tasks, List<String> notes, List<Callback> callbacks, String callbackState, CpuInvestigation cpu, TimingCoverage.Snapshot coverage, BackgroundCpu background,CapturePerformance performance,CaptureActivity activity) {
+        public Diagnostics(String trigger,long bookkeepingNanos,long snapshotNanos,List<Task> tasks,List<String> notes,List<Callback> callbacks,String callbackState,CpuInvestigation cpu,TimingCoverage.Snapshot coverage,BackgroundCpu background,CapturePerformance performance){this(trigger,bookkeepingNanos,snapshotNanos,tasks,notes,callbacks,callbackState,cpu,coverage,background,performance,null);}
         public Diagnostics(String trigger,long bookkeepingNanos,long snapshotNanos,List<Task> tasks,List<String> notes,List<Callback> callbacks,String callbackState,CpuInvestigation cpu,TimingCoverage.Snapshot coverage,BackgroundCpu background){this(trigger,bookkeepingNanos,snapshotNanos,tasks,notes,callbacks,callbackState,cpu,coverage,background,null);}
         public Diagnostics {
             tasks = tasks == null ? List.of() : List.copyOf(tasks); notes = notes == null ? List.of() : List.copyOf(notes); callbacks = callbacks == null ? List.of() : List.copyOf(callbacks);
@@ -23,7 +24,7 @@ public record Report(long id, long capturedAt, int ticks, double mspt, boolean a
         public Diagnostics(String trigger, long bookkeepingNanos, long snapshotNanos, List<Task> tasks, List<String> notes, List<Callback> callbacks) { this(trigger, bookkeepingNanos, snapshotNanos, tasks, notes, callbacks, null, null); }
         public Diagnostics(String trigger,long bookkeepingNanos,long snapshotNanos,List<Task> tasks,List<String> notes,List<Callback> callbacks,String callbackState,CpuInvestigation cpu,TimingCoverage.Snapshot coverage){this(trigger,bookkeepingNanos,snapshotNanos,tasks,notes,callbacks,callbackState,cpu,coverage,null);}
         public Diagnostics(String trigger,long bookkeepingNanos,long snapshotNanos,List<Task> tasks,List<String> notes,List<Callback> callbacks,String callbackState,CpuInvestigation cpu){this(trigger,bookkeepingNanos,snapshotNanos,tasks,notes,callbacks,callbackState,cpu,null);}
-        public Diagnostics summary() { return new Diagnostics(trigger, bookkeepingNanos, snapshotNanos, tasks, notes, callbacks, callbackState, cpu.summary(),coverage,background,performance); }
+        public Diagnostics summary() { return new Diagnostics(trigger, bookkeepingNanos, snapshotNanos, tasks, notes, callbacks, callbackState, cpu.summary(),coverage,background,performance,activity); }
         public Diagnostics(String trigger, long bookkeepingNanos, long snapshotNanos, List<Task> tasks, List<String> notes) { this(trigger, bookkeepingNanos, snapshotNanos, tasks, notes, List.of()); }
         public Diagnostics(String trigger, long bookkeepingNanos, long snapshotNanos) { this(trigger, bookkeepingNanos, snapshotNanos, List.of(), List.of()); }
     }

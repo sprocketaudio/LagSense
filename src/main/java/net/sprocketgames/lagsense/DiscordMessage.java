@@ -36,17 +36,21 @@ public final class DiscordMessage {
         return result.stream().sorted(Comparator.comparingDouble(Row::msPerTick).reversed().thenComparing(Row::type).thenComparing(Row::dimension)).toList();
     }
     public static boolean qualifies(Row row, ServerSettings.Delivery settings) {
+        if (!Double.isFinite(row.msPerTick()) || row.msPerTick() <= 0) return false;
         boolean ms = settings.minimumMs() > 0, percent = settings.minimumPercent() > 0;
         if (!ms && !percent) return true;
         boolean a = row.msPerTick() >= settings.minimumMs(), b = row.percent() >= settings.minimumPercent();
         return settings.match().equals("both") ? (!ms || a) && (!percent || b) : ms && a || percent && b;
     }
     public static Message build(Report report, ServerSettings.Discord connection, ServerSettings.Delivery settings, Gson gson) {
+        return build(report, connection, settings, gson, false);
+    }
+    static Message build(Report report, ServerSettings.Discord connection, ServerSettings.Delivery settings, Gson gson, boolean scheduled) {
         if(!report.admin()||report.recording())return null;
         boolean individual=!settings.groupBy().equals("type"),types=!settings.groupBy().equals("target");
         var individuals=individual?rows(report,"target").stream().filter(r->qualifies(r,settings)).limit(settings.top()).toList():List.<Row>of();
         var grouped=types?rows(report,"type").stream().filter(r->qualifies(r,settings)).limit(settings.top()).toList():List.<Row>of();
-        if(individuals.isEmpty()&&grouped.isEmpty()&&(settings.minimumMs()>0||settings.minimumPercent()>0))return null;
+        if(!scheduled&&individuals.isEmpty()&&grouped.isEmpty()&&(settings.minimumMs()>0||settings.minimumPercent()>0))return null;
         String origin=origin(report);
         var severity=ReportSeverity.evaluate(report);
         var components=new ArrayList<Map<String,Object>>();
@@ -62,29 +66,52 @@ public final class DiscordMessage {
         String lowest=measured&&performance.windows()>0?format(performance.lowestTps(),1):"N/A";
         String duration=measured?format(performance.durationSeconds(),1)+" seconds":"N/A";
         String timestamp=report.capturedAt()>0?java.time.format.DateTimeFormatter.ofPattern("d MMMM uuuu, HH:mm 'UTC'",Locale.ENGLISH).withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.ofEpochMilli(report.capturedAt())):"Not recorded";
-        String details="**Performance**\nAverage TPS: **"+average+" / 20**\nLowest TPS: **"+lowest+"**\nAverage MSPT: **"+format(report.mspt(),1)+" ms**\nPeak MSPT: **"+(measured?format(performance.peakNanos()/1e6,1):"N/A")+" ms**"
-            +"\n\n**Severity: "+severity.label+"**\n\nCapture duration: "+duration+"\nCaptured: "+timestamp+"\nProfile ID: "+report.id();
+        String details="**Performance**\nAverage TPS: **"+average+" / 20**\nLowest TPS: **"+lowest+"**\nAverage MSPT: **"+format(report.mspt(),1)+" ms**\nPeak MSPT: **"+(measured?format(performance.peakNanos()/1e6,1):"N/A")+" ms**";
+        double peakThreshold=connection.timerPolicy().significantPeakMs();
+        if(measured&&peakThreshold>0&&performance.peakNanos()/1e6>=peakThreshold)
+            details+="\nTick spike observed: **"+format(performance.peakNanos()/1e6,1)+" ms**. Contributor costs below are capture averages.";
+        if(measured&&severity==ReportSeverity.WARNING&&performance.windows()>0&&performance.lowestTps()<18)
+            details+="\nA brief TPS dip contributes to the Warning rating.";
+        var activity = report.diagnostics()==null ? null : report.diagnostics().activity();
+        details += "\n\n" + activitySummary(activity, severity) + "\n\n**Capture information**\nCapture duration: "+duration+"\nCaptured: "+timestamp+"\nProfile ID: "+report.id();
         if(origin.equals("Spike")&&measured&&!performance.triggerReason().isBlank())details+="\n"+safe(performance.triggerReason(),300);
         components.add(text(details));
         var notes=captureWarnings(report);
         String note=notes.isEmpty()?"":safe(String.join("\n",notes),600);
         var sections=new LinkedHashMap<String,List<String>>();
-        if(individual)sections.put(settings.groupBy().equals("both")?"Highest-cost individuals":"Highest-cost contributors",contributorLines(individuals,false));
-        if(types)sections.put(settings.groupBy().equals("both")?"Highest-cost types":"Highest-cost contributors",contributorLines(grouped,true));
-        var chunkLines=Report.aggregate(report.entries()).stream().limit(settings.top()).map(chunk->String.format(Locale.ROOT,"%.3f ms/t · %s chunk %d, %d",chunk.micros(report.ticks())/1000,safe(chunk.dimension(),80),chunk.x(),chunk.z())).toList();
-        if(!chunkLines.isEmpty())sections.put("Highest-cost chunks",chunkLines);
+        if(individual)sections.put(settings.groupBy().equals("both")?"Top measured individuals":"Top measured contributors",contributorLines(individuals,false));
+        if(types)sections.put(settings.groupBy().equals("both")?"Top measured types":"Top measured contributors",contributorLines(grouped,true));
+        var chunkLines=Report.aggregate(report.entries()).stream().filter(chunk->chunk.micros(report.ticks())>0).limit(settings.top()).map(chunk->cost(chunk.micros(report.ticks())/1000)+" ms/t · "+dimension(chunk.dimension())+" chunk "+chunk.x()+", "+chunk.z()).toList();
+        if(!chunkLines.isEmpty())sections.put("Top measured chunks",chunkLines);
         // Keep every configured summary entry inside Discord's text budget. Full identities stay in the attachment.
         int used=heading.length()+details.length()+note.length();
         int overhead=sections.keySet().stream().mapToInt(name->name.length()+6).sum();
         int lines=sections.values().stream().mapToInt(List::size).sum();
         int lineLimit=Math.max(1,(3900-used-overhead)/Math.max(1,lines)-1);
-        for(var section:sections.entrySet())components.add(text("**"+section.getKey()+"**\n"+String.join("\n",section.getValue().stream().map(line->safe(line,lineLimit)).toList())));
+        for(var section:sections.entrySet())components.add(text("**"+section.getKey()+"**\n"+String.join("\n",section.getValue().stream().map(line->summaryEntry(line,lineLimit)).toList())));
         if(!note.isEmpty())components.add(text(note));
         if(!settings.attachment().equals("none")){
             components.add(separator());
             components.add(Map.of("type",13,"file",Map.of("url","attachment://"+filename(report,settings.attachment()))));
         }
         return message(components,severity.color,role,connection.avatarUrl(),gson);
+    }
+    private static String activitySummary(CaptureActivity activity, ReportSeverity severity) {
+        if (activity == null) return "**Server Activity**\nUnknown · **" + severity.label + "**";
+        var counts = activity.total();
+        return "**Server Activity**\nOnline players (peak): **" + counts.peakPlayers() + "**\nLoaded chunks (avg / peak): **"
+            + format(counts.averageLoaded(), 1) + " / " + counts.peakLoaded() + "**\nTicking chunks (avg / peak): **"
+            + format(counts.averageTicking(), 1) + " / " + counts.peakTicking() + "**\nForce-loaded chunks (peak): **"
+            + counts.peakForced() + "**\n" + counts.samples() + " observations · " + activity.intervalTicks()
+            + "-tick sampling · sampled peaks.\n**"
+            + (activity.idle() ? "Idle" : "Active") + " · " + severity.label + "**";
+    }
+    static Message scheduledNotice(ServerSettings.Discord settings, Report report, ScheduledDiscord.Decision decision, Gson gson) {
+        String detail = decision == ScheduledDiscord.Decision.IDLE
+            ? "Server activity went idle. The latest scheduled capture was healthy."
+            : "Scheduled captures are running. No performance notification was sent in the last 24 hours.";
+        return message(List.of(text("## LagSense | Scheduled Capture\n" + safe(settings.serverName(),80) + "\n" + detail)),
+            ReportSeverity.evaluate(report).color, "", settings.avatarUrl(), gson);
     }
     static List<String> captureWarnings(Report report){
         var notes=new LinkedHashSet<String>();var diagnostics=report.diagnostics();
@@ -108,12 +135,35 @@ public final class DiscordMessage {
     private static List<String> contributorLines(List<Row> rows,boolean combined){
         if(rows.isEmpty())return List.of("No measured contributors pass the filters.");
         return rows.stream().map(row->{
-            String value=String.format(Locale.ROOT,"%.3f ms/t · %.1f%% · %s %s",row.msPerTick(),row.percent(),safe(row.kind(),40),safe(row.type(),100));
-            if(combined)value+=" (combined "+row.targets()+")";
-            value+=" · "+safe(row.dimension(),80);
-            if(row.x()!=null)value+=" at "+row.x()+", "+row.y()+", "+row.z();return value;
+            String context=combined?targetCount(row):"("+row.x()+", "+row.y()+", "+row.z()+")";
+            String measurement=String.format(Locale.ROOT,"%s ms/t%s · %.1f%% · %s",cost(row.msPerTick()),combined?" total":"",row.percent(),safe(row.type(),70));
+            return dimension(row.dimension())+" · "+context+"\n"+measurement;
         }).toList();
     }
+    private static String targetCount(Row row){
+        boolean singular=row.targets()==1;
+        String unit=switch(row.kind()){
+            case "Entity"->singular?"entity":"entities";
+            case "Block","Scheduled block","Random block"->singular?"block":"blocks";
+            case "Scheduled fluid","Random fluid"->singular?"fluid location":"fluid locations";
+            default->singular?"target":"targets";
+        };
+        return row.targets()+" "+unit;
+    }
+    private static String summaryEntry(String entry,int limit){
+        int newline=entry.indexOf('\n');
+        if(newline<0)return safe(entry,limit);
+        String context=entry.substring(0,newline),measurement=entry.substring(newline+1);
+        int separator=context.indexOf(" · ");
+        String detail=context.substring(separator+3);
+        int contextBudget=Math.max(detail.length()+5,limit/2);
+        if(context.length()>contextBudget)context=safe(context.substring(0,separator),contextBudget-detail.length()-3)+" · "+detail;
+        // Dense messages keep two bounded lines, prioritising coordinates or contributor counts.
+        if(context.length()>=limit-1)context=safe(context,Math.max(1,limit/2));
+        return context+"\n"+safe(measurement,Math.max(1,limit-context.length()-1));
+    }
+    private static String cost(double milliseconds){return milliseconds>0&&milliseconds<.001?"<0.001":format(milliseconds,3);}
+    private static String dimension(String id){return switch(id){case "minecraft:overworld"->"Overworld";case "minecraft:the_nether"->"Nether";case "minecraft:the_end"->"End";default->safe(id,60);};}
     static boolean mention(ServerSettings.Delivery settings,ReportSeverity severity){
         if(settings.roleId()==null||!settings.roleId().matches("[0-9]{16,22}"))return false;
         return switch(settings.mentionSeverity()){
@@ -131,7 +181,29 @@ public final class DiscordMessage {
         var payload=new LinkedHashMap<String,Object>();payload.put("flags",32768);payload.put("components",List.of(Map.of("type",17,"accent_color",color,"components",components)));payload.put("allowed_mentions",mentions);if(!avatarUrl.isEmpty())payload.put("avatar_url",avatarUrl);return new Message(gson.toJson(payload));
     }
     public static Message test(ServerSettings.Discord connection,Gson gson){return message(List.of(text("## LagSense | Test notification\n"+safe(connection.serverName(),80)+"\nWebhook connected. No profile data attached.")),ReportSeverity.UNKNOWN.color,"",connection.avatarUrl(),gson);}
-    private static String safe(String value,int length){if(value==null)return "";String clean=value.replace("@","@\u200b").replace('\r',' ').replace('`','\'');return clean.length()<=length?clean:clean.substring(0,length-1)+"…";}
+    private static String safe(String value,int length){if(value==null)return "";String clean=value.replace("@","@\u200b").replace('\r',' ').replace('\n',' ').replace('`','\'');return clean.length()<=length?clean:clean.substring(0,length-1)+"…";}
+    static Message withoutAttachment(Message message,String notice,Gson gson){
+        var payload=com.google.gson.JsonParser.parseString(message.json()).getAsJsonObject();
+        var components=payload.getAsJsonArray("components").get(0).getAsJsonObject().getAsJsonArray("components");
+        for(int i=components.size()-1;i>=0;i--)if(components.get(i).getAsJsonObject().get("type").getAsInt()==13){
+            components.remove(i);
+            if(i>0&&components.get(i-1).getAsJsonObject().get("type").getAsInt()==14){components.remove(i-1);i--;}
+        }
+        // Leave room for the attachment notice within Discord's shared text budget.
+        int remaining=4000-notice.length();
+        var iterator=components.iterator();
+        while(iterator.hasNext()){
+            var part=iterator.next().getAsJsonObject();
+            if(part.get("type").getAsInt()!=10)continue;
+            if(remaining<=0){iterator.remove();continue;}
+            String content=part.get("content").getAsString();
+            if(content.length()>remaining)content=content.substring(0,remaining-1)+"…";
+            part.addProperty("content",content);remaining-=content.length();
+        }
+        components.add(gson.toJsonTree(text(notice)));
+        payload.remove("attachments");
+        return new Message(gson.toJson(payload));
+    }
     public static String origin(Report report){String trigger=report.diagnostics()==null?"":report.diagnostics().trigger();return trigger.equals("Scheduled")?"Scheduled":trigger.equals("Spike follow-up")?"Spike":trigger.equals("Manual")?"Manual":"Unknown";}
     public static String filename(Report report){
         String stamp=java.time.format.DateTimeFormatter.ofPattern("yyMMdd-HHmmss",Locale.ROOT).withZone(java.time.ZoneOffset.UTC).format(java.time.Instant.ofEpochMilli(Math.max(0,report.capturedAt())));

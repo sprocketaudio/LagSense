@@ -15,8 +15,14 @@
       </select></label
     >
   </header>
-  <div class="capture-notices" id="notices" aria-live="polite"></div>
-  <nav id="navigation" aria-label="Report sections"></nav>
+  <div class="capture-notices" id="report-error" role="alert"></div>
+  <div class="report-navigation">
+    <nav id="navigation" aria-label="Report sections"></nav>
+    <details class="capture-limitations" id="capture-limitations" hidden>
+      <summary></summary>
+      <ul></ul>
+    </details>
+  </div>
   <main>
     <section id="overview" aria-label="Capture summary"></section>
     <section id="explorer" hidden>
@@ -107,7 +113,7 @@
         aria-label="Selected result details"
       >
         <div class="result-head">
-          <h2 id="detail-title">Details</h2>
+          <h2 id="detail-title" tabindex="-1">Details</h2>
           <button id="detail-close" type="button">Close details</button>
         </div>
         <div id="detail-body"></div>
@@ -129,14 +135,14 @@
         <p>
           Target and event timings include the work they call, so the same work
           can appear in more than one result. CPU samples show which Java code
-          was running when each sample was taken. Their percentages describe how
-          often code appeared in the samples rather than CPU usage or elapsed
-          time.
+          was running when each sample was taken. Short calls and time spent
+          waiting can be missed. Percentages show how often code appeared in
+          the saved samples.
         </p>
         <p>
           A missing result does not mean an object used no time or was removed
-          from the world. Some activity cannot be measured, and any known
-          capture limits are shown above.
+          from the world. Some activity cannot be measured. The Summary and
+          capture limitation indicator explain known limitations.
         </p>
         <p>
           This file may include coordinates, thread names and UUIDs. Review it

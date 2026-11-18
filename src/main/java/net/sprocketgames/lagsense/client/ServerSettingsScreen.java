@@ -12,6 +12,7 @@ import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 public final class ServerSettingsScreen extends SettingsPage {
+    private static final List<String> DISCORD_TABS=List.of("Connection","Timer","Spikes","Manual","Settings");
     private final Screen parent;
     private final String section;
     private ServerSettingsForms.View expected;
@@ -50,6 +51,7 @@ public final class ServerSettingsScreen extends SettingsPage {
         } else {
             var d=view.discord();put("enabled",d.enabled());put("name",d.serverName());put("webhook","");put("avatar",d.avatarUrl());
             loadDelivery("timer",d.timer());loadDelivery("spikes",d.spikes());loadDelivery("manual",d.manual());
+            loadTimerPolicy(d.timerPolicy());
         }
         updateDirty();
     }
@@ -57,6 +59,10 @@ public final class ServerSettingsScreen extends SettingsPage {
         put(p+".enabled",d.enabled());put(p+".cooldown",d.cooldownSeconds());put(p+".top",d.top());
         put(p+".ms",d.minimumMs());put(p+".percent",d.minimumPercent());put(p+".match",d.match());put(p+".group",d.groupBy());
         put(p+".attachment",d.attachment());put(p+".role",d.roleId());put(p+".mention",d.mentionSeverity());
+    }
+    private void loadTimerPolicy(ServerSettings.TimerDelivery policy) {
+        put("suppressRoutine",policy.suppressRoutine());put("significantPeak",policy.significantPeakMs());
+        put("hotspot",policy.hotspotMsPerTick());put("idleNotice",policy.idleNotice());put("dailyHeartbeat",policy.dailyHeartbeat());
     }
     private boolean on(String key){return Boolean.parseBoolean(values.get(key));}
     private int integer(String key){return Integer.parseInt(values.get(key));}
@@ -67,7 +73,8 @@ public final class ServerSettingsScreen extends SettingsPage {
     }
     private ServerSettingsForms.View desired() {
         if(section.equals("advanced"))return new ServerSettingsForms.View(new ServerSettingsForms.Advanced(on("cpu"),on("callbacks"),on("empty"),new BackupMonitor.Settings(values.get("backup"),integer("grace")),new ProfilingLimits(values.get("resource"),integer("eventMiB"),integer("cpuMiB"),integer("jfrMiB"),integer("depth"))),expected.discord(),expected.effective());
-        var d=expected.discord();return new ServerSettingsForms.View(expected.advanced(),new ServerSettingsForms.Discord(on("enabled"),d.webhookConfigured(),values.get("name"),delivery("timer"),delivery("spikes"),delivery("manual"),values.get("avatar")),expected.effective());
+        var policy=new ServerSettings.TimerDelivery(on("suppressRoutine"),number("significantPeak"),number("hotspot"),on("idleNotice"),on("dailyHeartbeat"));
+        var d=expected.discord();return new ServerSettingsForms.View(expected.advanced(),new ServerSettingsForms.Discord(on("enabled"),d.webhookConfigured(),values.get("name"),delivery("timer"),delivery("spikes"),delivery("manual"),values.get("avatar"),policy),expected.effective());
     }
     private void updateDirty(){try{dirty=!desired().equals(expected)||!values.getOrDefault("webhook","").isBlank();}catch(RuntimeException e){dirty=true;}if(applyButton!=null)applyButton.active=dirty&&!waiting&&!denied;}
     private void change(Runnable edit){edit.run();message="";updateDirty();rebuildWidgets();}
@@ -75,6 +82,7 @@ public final class ServerSettingsScreen extends SettingsPage {
         var defaults=ServerSettingsForms.view(ServerSettings.defaults());
         if(section.equals("advanced"))load(defaults);
         else if(tab.equals("Connection")){put("enabled",defaults.discord().enabled());put("name",defaults.discord().serverName());put("webhook","");put("avatar",defaults.discord().avatarUrl());}
+        else if(tab.equals("Settings"))loadTimerPolicy(defaults.discord().timerPolicy());
         else {String p=tab.toLowerCase(Locale.ROOT);loadDelivery(p,switch(p){case "timer"->defaults.discord().timer();case "spikes"->defaults.discord().spikes();default->defaults.discord().manual();});}
         updateDirty();message="Defaults restored. Apply to save.";rebuildWidgets();
     }
@@ -95,10 +103,10 @@ public final class ServerSettingsScreen extends SettingsPage {
         int x=margin(),col=(contentWidth()-12)/2,right=x+col+12,top=headerControlsTop()+12;
         if(section.equals("discord")) {
             var tabs=new UiMetrics.Flow(x,width-x,headerControlsTop());
-            for(String name:List.of("Connection","Timer","Spikes","Manual"))UiHints.hint(tab(name,slot(tabs,name,48),tab.equals(name),()->{tab=name;rebuildWidgets();}),UiHints.discordTab(name)).active=!waiting&&!denied;
+            for(String name:DISCORD_TABS)UiHints.hint(tab(name,slot(tabs,name,48),tab.equals(name),()->{tab=name;rebuildWidgets();}),UiHints.discordTab(name)).active=!waiting&&!denied;
             top=tabs.bottom()+20;
         }
-        beginList(top,section.equals("advanced")?0:List.of("Connection","Timer","Spikes","Manual").indexOf(tab));int y=top;
+        beginList(top,section.equals("advanced")?0:DISCORD_TABS.indexOf(tab));int y=top;
         if(section.equals("advanced")) {
             boolean compact=panelBottom()-panelTop()<380;
             toggleField("cpu","CPU sampling",x,y,col,"Sample server CPU activity during captures.");
@@ -121,18 +129,25 @@ public final class ServerSettingsScreen extends SettingsPage {
             var webhook=field("webhook",expected.discord().webhookConfigured()?"Replace webhook":"Webhook URL",x,y,contentWidth(),"[^\\p{Cntrl}]*",512,"Discord webhook URL used to send notifications.");
             webhook.addFormatter((text,cursor)->FormattedCharSequence.forward("*".repeat(text.length()),Style.EMPTY));y+=48;
             field("avatar","Avatar URL",x,y,contentWidth(),"[^\\p{Cntrl}]*",2048,"Optional image URL for the Discord notification avatar. Leave blank to use the webhook's default avatar.");y+=48;
+        } else if(tab.equals("Settings")) {
+            formSection("Scheduled notifications",y);y+=24;
+            toggleField("suppressRoutine","Suppress routine",x,y,col,"Skip healthy scheduled notifications unless a peak or new hotspot qualifies. Captures continue. Off sends every scheduled result, subject to delivery filters and cooldown.");y+=32;
+            field("significantPeak","Peak tick ms",x,y,col,"[0-9.]*",8,"Send when any tick reaches this time. 0 disables this trigger. Range 0–60000 ms.");
+            field("hotspot","New hotspot ms/t",right,y,col,"[0-9.]*",8,"Send when a new contributor type in a dimension reaches this average cost. Range 0–10000 ms/t. 0 disables this trigger.");y+=48;
+            toggleField("idleNotice","Idle notice",x,y,col,"Send a brief notice when activity becomes idle, with zero players and zero ticking chunks across the sampled observations.");
+            toggleField("dailyHeartbeat","Daily heartbeat",right,y,col,"Send a brief status on the next scheduled capture after 24 hours without a delivered notification.");y+=32;
         } else {
             String p=tab.toLowerCase(Locale.ROOT);
             toggleField(p+".enabled","Enabled",x,y,col,"Deliver results for "+tab.toLowerCase(Locale.ROOT)+" captures.");
             y+=40;
-            field(p+".cooldown","Delivery cooldown seconds",x,y,col,"[0-9]*",5,"Minimum time between Discord deliveries for this capture type.");
+            field(p+".cooldown","Delivery cooldown seconds",x,y,col,"[0-9]*",5,p.equals("spikes")?"Minimum time between spike deliveries with the same severity, trigger kind and leading measured areas. Different signatures can send during this cooldown.":"Minimum time between Discord deliveries for this capture type.");
             field(p+".top","Top results",right,y,col,"[0-9]*",2,"Number of results in each contributor section and the chunk list.");y+=48;
             field(p+".ms","Minimum ms/t",x,y,col,"[0-9.]*",8,"Only include results using this many milliseconds per tick or more. Set to 0 to turn off this filter.");
             field(p+".percent","Minimum tick %",right,y,col,"[0-9.]*",8,"Only include results using this percentage of server tick time or more. Set to 0 to turn off this filter.");y+=48;
             choice(p+".match","Match",x,y,col,List.of("either","both"),List.of("Either","Both"),"Either includes results that pass at least one enabled filter. Both includes results that pass every enabled filter.");
             choice(p+".group","Group",right,y,col,List.of("target","type","both"),List.of("Individual","Type","Both"),"Show individual targets, combined types, or separate lists of both.");y+=32;
             label("Attach file",x,y,col);
-            choice(p+".attachment","",x,y+14,col,List.of("none","html","json","csv"),List.of("None","HTML","JSON","CSV"),"Attach one report file. None sends the Discord summary without a file.");
+            choice(p+".attachment","",x,y+14,col,List.of("none","html","json","csv"),List.of("None","HTML","JSON","CSV"),"Attach one report file. None sends only the summary. Oversized or unavailable files fall back to the summary.");
             label("Mention severity",right,y,col);
             choice(p+".mention","",right,y+14,col,List.of("never","critical","degraded","warning","always"),List.of("Never","Critical only","Degraded or worse","Warning or worse","Always"),"When to mention the configured role. Reports still send below this level. Insufficient Data only mentions with Always.");y+=40;
             field(p+".role","Mention role ID",x,y,contentWidth(),"[0-9]*",22,"Optional Discord role to mention for this capture type. Leave blank for no mention.");y+=48;

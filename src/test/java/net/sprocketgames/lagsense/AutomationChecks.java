@@ -118,7 +118,7 @@ final class AutomationChecks {
         calls.set(0);
         try (var delivery = new DiscordDelivery(connection(timer, spikes), (target, body) -> { calls.incrementAndGet(); throw new java.io.IOException("secret-url-abcdefghijkl"); }, ms -> {}, logs::add)) {
             delivery.capture(report("Scheduled"), ""); delivery.flush();
-            require(calls.get() == 3 && !delivery.status().contains("abcdefghijkl"), "Connection failures have bounded retries and sanitized status");
+            require(calls.get() == 1 && delivery.status().contains("outcome unknown") && !delivery.status().contains("abcdefghijkl"), "Ambiguous connection failures do not risk duplicate posts and retain sanitized status");
         }
         var started = new CountDownLatch(1); var finished = new CountDownLatch(1); var release = new CountDownLatch(1); calls.set(0);
         var busy = new DiscordDelivery(connection(timer, spikes), (target, body) -> {

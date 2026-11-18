@@ -40,9 +40,11 @@ final class TooltipCleanupChecks {
         check(((UiInput)avatar).getValue().isEmpty(),"Avatar field is blank by default");((UiInput)avatar).setValue("https://cdn.example.com/avatar.png");
         var desired=ServerSettingsScreen.class.getDeclaredMethod("desired");desired.setAccessible(true);check(((ServerSettingsForms.View)desired.invoke(discord)).discord().avatarUrl().equals("https://cdn.example.com/avatar.png"),"Avatar edits bind to the existing server-settings draft");
         exact(discord,"Connection","Configure Discord webhook notifications.");
-        exact(discord,"Timer","Run profiles at a fixed interval.");
-        exact(discord,"Spikes","Start a follow-up profile when a configured threshold is reached.");
+        exact(discord,"Timer","Configure notifications for scheduled profiles.");
+        exact(discord,"Spikes","Configure notifications for spike follow-up profiles.");
         exact(discord,"Manual","Configure notifications for manually started profiles.");
+        var settings=server("discord");set(settings,"tab","Settings");settings.init();
+        for(var child:settings.children())if(child instanceof UiScrollList list)for(var widget:list.children())if(widget instanceof UiButton||widget instanceof UiInput)check(!hint((AbstractWidget)widget).isBlank(),"Every notification Settings control has a tooltip");
         var overlay=new OverlaySettingsScreen(null);overlay.width=960;overlay.height=540;overlay.init();
         exact(overlay,"HUD ","Show or hide the LagSense HUD. The Hide/show visuals shortcut temporarily hides performance overlays.");
         exact(overlay,"World markers","Show captured timing labels above entities and highlight blocks in the world.");
@@ -50,11 +52,12 @@ final class TooltipCleanupChecks {
         for(String name:List.of("Timer","Spikes","Manual")){
             var page=server("discord");set(page,"tab",name);page.init();
             check(widgets(page).stream().noneMatch(w->w.getMessage().getString().startsWith("Coordinates")),"Discord has no coordinate toggle");
-            exact(page,"None","Attach one report file. None sends the Discord summary without a file.");
+            String attachmentLabel="HTML";
+            exact(page,attachmentLabel,"Attach one report file. None sends only the summary. Oversized or unavailable files fall back to the summary.");
             var controls=widgets(page);check(controls.stream().noneMatch(w->w.getMessage().getString().contains("Group repeats")||w.getMessage().getString().equals("Top contributors")),"Obsolete repeat and contributor-count labels are gone");
             var group=controls.stream().filter(UiButton.class::isInstance).map(UiButton.class::cast).filter(w->w.getMessage().getString().startsWith("Group:")).findFirst().orElseThrow();
-            var mention=controls.stream().filter(UiButton.class::isInstance).map(UiButton.class::cast).filter(w->w.getMessage().getString().equals("Degraded or worse")).findFirst().orElseThrow();
-            var attachment=controls.stream().filter(UiButton.class::isInstance).map(UiButton.class::cast).filter(w->w.getMessage().getString().equals("None")).findFirst().orElseThrow();
+            var mention=controls.stream().filter(UiButton.class::isInstance).map(UiButton.class::cast).filter(w->w.getMessage().getString().equals(name.equals("Manual")?"Never":"Degraded or worse")).findFirst().orElseThrow();
+            var attachment=controls.stream().filter(UiButton.class::isInstance).map(UiButton.class::cast).filter(w->w.getMessage().getString().equals(attachmentLabel)).findFirst().orElseThrow();
             var attachLabel=controls.stream().filter(w->w.getMessage().getString().equals("Attach file")).findFirst().orElseThrow();
             var mentionLabel=controls.stream().filter(w->w.getMessage().getString().equals("Mention severity")).findFirst().orElseThrow();
             check(attachment.getY()==mention.getY()&&attachment.getWidth()==mention.getWidth()&&attachLabel.getY()==mentionLabel.getY()&&attachLabel.getX()==attachment.getX(),"Attachment and mention controls have matching labels, rows and widths on every delivery tab");
@@ -65,7 +68,7 @@ final class TooltipCleanupChecks {
             String prefix=name.toLowerCase(Locale.ROOT);var values=(Map<String,String>)field(page,"values");
             var apply=ServerSettingsScreen.class.getDeclaredMethod("desired");apply.setAccessible(true);
             for(String next:List.of("target","type","both")){values.put(prefix+".group",next);var draft=((ServerSettingsForms.View)apply.invoke(page)).discord();var delivery=switch(prefix){case "timer"->draft.timer();case "spikes"->draft.spikes();default->draft.manual();};check(delivery.groupBy().equals(next),"All three grouping choices bind to the editable delivery DTO");}
-            check(((ServerSettingsForms.View)apply.invoke(page)).discord().manual().mentionSeverity().equals("degraded"),"Mention threshold retains its default in the editable DTO");
+            check(((ServerSettingsForms.View)apply.invoke(page)).discord().manual().mentionSeverity().equals("never"),"Manual mention threshold retains its default in the editable DTO");
 
         }
         var defaults=ServerSettings.defaults();var capture=new CaptureSettingsScreen(null,new CaptureSettings(defaults.timer(),defaults.spikes()),"");capture.width=960;capture.height=540;capture.init();

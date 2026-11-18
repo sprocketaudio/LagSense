@@ -11,10 +11,12 @@ public final class ServerSettingsForms {
         public Advanced { Objects.requireNonNull(backups);limits=limits==null?ProfilingLimits.defaults():limits; }
     }
     public record Discord(boolean enabled, boolean webhookConfigured, String serverName, ServerSettings.Delivery timer,
-                          ServerSettings.Delivery spikes, ServerSettings.Delivery manual,String avatarUrl) {
+                          ServerSettings.Delivery spikes, ServerSettings.Delivery manual,String avatarUrl,ServerSettings.TimerDelivery timerPolicy) {
         public Discord(boolean enabled,boolean webhookConfigured,String serverName,ServerSettings.Delivery timer,ServerSettings.Delivery spikes,ServerSettings.Delivery manual){this(enabled,webhookConfigured,serverName,timer,spikes,manual,"");}
+        public Discord(boolean enabled,boolean webhookConfigured,String serverName,ServerSettings.Delivery timer,ServerSettings.Delivery spikes,ServerSettings.Delivery manual,String avatarUrl){this(enabled,webhookConfigured,serverName,timer,spikes,manual,avatarUrl,ServerSettings.TimerDelivery.DEFAULT);}
         public Discord {
             avatarUrl=ServerSettings.validateAvatar(avatarUrl);
+            timerPolicy=timerPolicy==null?ServerSettings.TimerDelivery.DEFAULT:timerPolicy;
             Objects.requireNonNull(timer); Objects.requireNonNull(spikes); Objects.requireNonNull(manual);
             if(serverName==null||serverName.isBlank()||serverName.length()>80)throw new IllegalArgumentException("Server name must have 1–80 characters.");
         }
@@ -31,7 +33,7 @@ public final class ServerSettingsForms {
     public static View view(ServerSettings s) {
         var d=s.discord();
         return new View(new Advanced(s.modTasks(),s.detailedCallbacks(),s.monitorEmptyServer(),s.backups(),s.limits()),
-            new Discord(d.enabled(),!d.webhookUrl().isBlank(),d.serverName(),d.timer(),d.spikes(),d.manual(),d.avatarUrl()),s.limits().effective());
+            new Discord(d.enabled(),!d.webhookUrl().isBlank(),d.serverName(),d.timer(),d.spikes(),d.manual(),d.avatarUrl(),d.timerPolicy()),s.limits().effective());
     }
     public static Map<String,Object> changes(String section,ServerSettings current,Edit edit) {
         var live=view(current);var before=edit.expected();var after=edit.desired();
@@ -47,6 +49,12 @@ public final class ServerSettingsForms {
             if(!live.discord().equals(before.discord()))throw new IllegalArgumentException("Settings changed. Reopen this page before applying.");
             var d=after.discord();out.put("discord.enabled",d.enabled());out.put("discord.server_name",d.serverName());out.put("discord.avatar_url",d.avatarUrl());
             delivery(out,"timer",d.timer());delivery(out,"spikes",d.spikes());delivery(out,"manual",d.manual());
+            var policy=d.timerPolicy();
+            out.put("discord.timer.suppress_routine",policy.suppressRoutine());
+            out.put("discord.timer.significant_peak_ms",policy.significantPeakMs());
+            out.put("discord.timer.hotspot_ms_per_tick",policy.hotspotMsPerTick());
+            out.put("discord.timer.idle_notice",policy.idleNotice());
+            out.put("discord.timer.daily_heartbeat",policy.dailyHeartbeat());
             if(!edit.webhook().isBlank()) {
                 if(edit.webhook().length()>512)throw new IllegalArgumentException("Webhook is too long.");
                 String url=edit.webhook().strip();ServerSettings.validateWebhook(url);out.put("discord.webhook_url",url);

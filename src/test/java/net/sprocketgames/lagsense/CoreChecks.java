@@ -56,7 +56,7 @@ public final class CoreChecks {
         scheduleChecks();
         storageChecks(gson);
         ArchiveChecks.run(gson);
-        AutomationChecks.run(gson);DiscordPolishChecks.run();
+        AutomationChecks.run(gson);DiscordPolishChecks.run();ActivityReportingChecks.run();
         NewFeatureChecks.run(gson);
         TimingCoverageChecks.run();
         CpuSamplesChecks.run();ProfilingLimitsChecks.policy();

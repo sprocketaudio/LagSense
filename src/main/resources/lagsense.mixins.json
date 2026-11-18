@@ -8,7 +8,8 @@
     "EntityTimingMixin",
     "BlockTimingMixin",
     "ScheduledTimingMixin",
-    "RandomTimingMixin"
+    "RandomTimingMixin",
+    "ChunkMapActivityAccessor"
   ],
   "client": [
     "ClientRenderTimingMixin",

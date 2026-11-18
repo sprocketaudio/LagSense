@@ -2,7 +2,7 @@ plugins {
     id 'java-library'
     id 'net.neoforged.moddev' version '2.0.148'
 }
-version = '1.0.0'
+version = '1.1.0'
 group = 'net.sprocketgames.lagsense'
 base { archivesName = 'lagsense' }
 java.toolchain.languageVersion = JavaLanguageVersion.of(25)
@@ -25,6 +25,7 @@ dependencies {
     testRuntimeOnly "org.lwjgl:lwjgl-freetype:3.4.1:natives-${nativePlatform}${nativeArch}"
     testRuntimeOnly "org.lwjgl:lwjgl-glfw:3.4.1:natives-${nativePlatform}${nativeArch}"
     testRuntimeOnly "org.lwjgl:lwjgl-opengl:3.4.1:natives-${nativePlatform}${nativeArch}"
+    testRuntimeOnly "org.lwjgl:lwjgl-stb:3.4.1:natives-${nativePlatform}${nativeArch}"
     // API references only: none of these mods are bundled or required at runtime.
     compileOnly(ftbChunks) { transitive = false }
     compileOnly(ftbTeams) { transitive = false }
