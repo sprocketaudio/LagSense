@@ -1,5 +1,6 @@
 package net.sprocketgames.lagsense.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.sprocketgames.lagsense.*;
 import java.util.*;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
@@ -18,13 +19,14 @@ public final class HeatmapScreen extends LagScreen {
     private final Map<Report.Chunk,String> labels=new HashMap<>();
     private final Map<String,List<HeatmapPlan.Tile>> tiles=new HashMap<>();
     private final MapInteraction gesture=new MapInteraction();
+    private final List<UiButton> chunkActions=new ArrayList<>(3);
     private HeatmapPlan plan;
     private net.minecraft.client.renderer.texture.DynamicTexture mapTexture;
     private String mappedDimension,dimension,owner,query="";
     private int mappedTheme=-1;
     private boolean selectingMod;
     private double centerX,centerZ,zoomScroll;
-    private int cell=18,mapTop;
+    private int cell=18,mapTop,chunkActionsLeft;
     private Report.Chunk selected;
     public HeatmapScreen(Screen parent,Report report){this(parent,report,LagSenseClient.archived);}
     public HeatmapScreen(Screen parent,Report report,boolean archived){
@@ -65,13 +67,53 @@ public final class HeatmapScreen extends LagScreen {
         controls.action("Hottest",52,this::hottest);controls.action("Fit",32,this::fit);
         controls.toggle("World",64,LagSenseClient.settings.chunkHeatmap,()->{LagSenseClient.settings.chunkHeatmap=!LagSenseClient.settings.chunkHeatmap;LagSenseClient.settings.save();rebuildWidgets();});
         mapTop=controls.finish()+8;if(selectingMod)results(mapTop,selector(mapTop).entries,true);else clearResults();
-        UiHints.hint(action("Copy",margin(),footer(),44,()->{if(ClientAccess.allowed(report))minecraft.keyboardHandler.setClipboard(Profiler.JSON.toJson(report));}),"Copy this report as JSON.");
-        action("Export",margin()+48,footer(),48,()->minecraft.gui.setScreen(new ExportScreen(this,report,archived)));
-        if(archived){
-            var destination=selectedDestination();
-            if(destination!=null){var actions=TargetActions.actions(this,destination);int x=margin()+100;for(var item:actions){var button=action(item.label(),x,footer(),item.label().equals("Mark")?48:36,item.run()).enabledWhen(item.enabled()).visibleWhen(item.visible()==null?()->true:item.visible());if(item.mark()!=null)button.markState(item.mark());x+=item.label().equals("Mark")?52:40;}}
-        }else{var destination=selectedDestination();if(destination!=null){var mark=TargetActions.actions(this,destination)[0];action("Mark",margin()+100,footer(),48,mark.run()).markState(destination.target());}}
-        action("Close",width-margin()-54,footer(),54,this::onClose);
+        var copy=action("Copy",margin(),footer(),40,()->{if(ClientAccess.allowed(report))minecraft.keyboardHandler.setClipboard(Profiler.JSON.toJson(report));});
+        UiHints.hint(copy,"Copy this report as JSON.");
+        var export=action("Export",copy.getX()+copy.getWidth()+4,footer(),44,()->minecraft.gui.setScreen(new ExportScreen(this,report,archived)));
+        chunkActionsLeft=export.getX()+export.getWidth()+4;
+        refreshChunkActions();
+        int closeWidth=Math.max(48,UiFonts.labelWidth("Close")+12);
+        action("Close",width-margin()-closeWidth,footer(),closeWidth,this::onClose);
+    }
+    private void refreshChunkActions(){
+        chunkActions.forEach(this::removeWidget);
+        chunkActions.clear();
+        if(selected==null)return;
+
+        int x=chunkActionsLeft;
+        var destination=selectedDestination();
+        UiResults.Action travel=null;
+        if(destination!=null){
+            var actions=TargetActions.actions(this,destination);
+            var mark=actions[0];
+            var button=action(mark.label(),x,footer(),UiResults.markWidth(),mark.run()).markState(mark.mark());
+            button.refreshAvailability();
+            UiHints.hint(button,"Toggle the selected chunk's marker. Its outline is visible nearby in the world.");
+            chunkActions.add(button);
+            x+=button.getWidth()+4;
+            if(archived)travel=actions[1];
+        }
+        var inspect=action("Inspect",x,footer(),44,this::inspectSelected);
+        UiHints.hint(inspect,"Open the selected chunk's contributors. You can also right-click a chunk.");
+        chunkActions.add(inspect);
+        if(travel!=null){
+            x+=inspect.getWidth()+4;
+            chunkActions.add(action(travel.label(),x,footer(),28,travel.run()).enabledWhen(travel.enabled()).visibleWhen(travel.visible()));
+        }
+    }
+    private void select(Report.Chunk chunk){
+        if(selected==chunk)return;
+        selected=chunk;
+        refreshChunkActions();
+    }
+    private Report.Chunk chunkAt(double x,double y){
+        var hit=map().at(x,y);
+        return hit==null?null:find(hit.x(),hit.z());
+    }
+    private void inspectSelected(){
+        if(selected==null)return;
+        if(owner==null)Investigations.chunk(this,report,archived,dimension,selected.x(),selected.z());
+        else minecraft.gui.setScreen(new ChunkScreen(this,report,archived,data.chunk(dimension,selected.x(),selected.z())));
     }
     private ComparisonTargets.Destination selectedDestination(){
         if(selected==null||report.chunks()==null)return null;
@@ -83,10 +125,35 @@ public final class HeatmapScreen extends LagScreen {
         if(dropdownOpen())return super.mouseScrolled(x,y,horizontal,vertical);
         if(!selectingMod&&viewport().contains(x,y)&&Double.isFinite(vertical)&&vertical!=0){if(zoomScroll*vertical<0)zoomScroll=0;zoomScroll=Math.max(-8,Math.min(8,zoomScroll+vertical));int steps=(int)zoomScroll;zoomScroll-=steps;if(steps!=0)zoom(steps,x,y);return true;}zoomScroll=0;return super.mouseScrolled(x,y,horizontal,vertical);
     }
-    @Override public boolean mouseClicked(MouseButtonEvent e,boolean twice){if(super.mouseClicked(e,twice))return true;if(!selectingMod&&e.button()==0&&viewport().contains(e.x(),e.y())){gesture.begin(e.x(),e.y());return true;}return false;}
-    @Override public boolean mouseDragged(MouseButtonEvent e,double dx,double dy){if(e.button()==0&&gesture.pressed()){var shift=gesture.drag(e.x(),e.y());centerX-=shift.x()/cell;centerZ-=shift.y()/cell;return true;}return super.mouseDragged(e,dx,dy);}
+    @Override public boolean mouseClicked(MouseButtonEvent e,boolean twice){
+        if(super.mouseClicked(e,twice))return true;
+        if(selectingMod||!viewport().contains(e.x(),e.y()))return false;
+        if(e.button()==InputConstants.MOUSE_BUTTON_LEFT){
+            gesture.begin(e.x(),e.y());
+            return true;
+        }
+        if(e.button()==InputConstants.MOUSE_BUTTON_RIGHT&&!gesture.pressed()){
+            var chunk=chunkAt(e.x(),e.y());
+            if(chunk==null)return false;
+            select(chunk);
+            inspectSelected();
+            return true;
+        }
+        return false;
+    }
+    @Override public boolean mouseDragged(MouseButtonEvent e,double dx,double dy){
+        if(e.button()!=InputConstants.MOUSE_BUTTON_LEFT||!gesture.pressed())return super.mouseDragged(e,dx,dy);
+        var shift=gesture.drag(e.x(),e.y());
+        centerX-=shift.x()/cell;
+        centerZ-=shift.y()/cell;
+        return true;
+    }
     @Override public boolean mouseReleased(MouseButtonEvent e){
-        if(e.button()==0&&gesture.pressed()){boolean click=gesture.release();if(click&&viewport().contains(e.x(),e.y())){var hit=map().at(e.x(),e.y());selected=hit==null?null:find(hit.x(),hit.z());if(selected!=null){if(owner==null)Investigations.chunk(this,report,archived,dimension,selected.x(),selected.z());else minecraft.gui.setScreen(new ChunkScreen(this,report,archived,data.chunk(dimension,selected.x(),selected.z())));}else rebuildWidgets();}return true;}return super.mouseReleased(e);
+        if(e.button()!=InputConstants.MOUSE_BUTTON_LEFT||!gesture.pressed())return super.mouseReleased(e);
+        if(gesture.release()&&viewport().contains(e.x(),e.y())){
+            select(chunkAt(e.x(),e.y()));
+        }
+        return true;
     }
     @Override public void extractRenderState(GuiGraphicsExtractor g,int mx,int my,float partial){
         if(profileNavigation!=null)profileNavigation.render(this,g,mx,my);else{canvas(g,"CHUNK HEATMAP");text(g,"North (−Z)",margin(),panelTop()+25,contentWidth(),UiTheme.SECONDARY);headerDivider(g);}
@@ -94,9 +161,12 @@ public final class HeatmapScreen extends LagScreen {
             g.enableScissor(area.left(),area.top(),area.right(),area.bottom());paintMap(g,view);
             if(selected!=null&&selected.dimension().equals(dimension))outline(g,view,selected.x(),selected.z(),UiTheme.TEXT);
             if(hover!=null&&(selected==null||hover.x()!=selected.x()||hover.z()!=selected.z()))outline(g,view,hover.x(),hover.z(),UiTheme.SECONDARY);
+            var marker=LagSenseClient.waypoint;
+            var marked=marker!=null&&marker.kind().equals("Chunk")&&marker.dimension().equals(dimension)?find(marker.x()>>4,marker.z()>>4):null;
+            if(marked!=null)outline(g,view,marked.x(),marked.z(),UiTheme.ICE);
             if(minecraft.player!=null&&minecraft.level!=null&&dimension.equals(minecraft.level.dimension().identifier().toString())){var position=minecraft.player.blockPosition();int rx=view.column(position.getX()>>4),rz=view.row(position.getZ()>>4);if(rx>=0&&rz>=0){int px=view.pixelX(rx)+cell/2,py=view.pixelY(rz)+cell/2;g.fill(px-2,py-2,px+2,py+2,UiTheme.BACKGROUND);g.fill(px-1,py-1,px+1,py+1,UiTheme.TEXT);}}
             g.disableScissor();if(hover!=null){var c=find(hover.x(),hover.z());UiHints.region(g,font,mx,my,view.pixelX(view.column(hover.x())),view.pixelY(view.row(hover.z())),cell,cell,c==null?"No received data.":label(c));}
-            text(g,selected==null?"No chunk selected":label(selected),margin(),height-74,contentWidth(),UiTheme.TEXT);TimingLegend.paint(g,margin(),height-60,contentWidth());
+            text(g,selected==null?"No chunk selected":label(selected)+(selected==marked?" | Marked":""),margin(),height-74,contentWidth(),UiTheme.TEXT);TimingLegend.paint(g,margin(),height-60,contentWidth());
         }super.extractRenderState(g,mx,my,partial);
     }
     private void fit(){var values=relevant();if(values.isEmpty())return;int minX=values.stream().mapToInt(Report.Chunk::x).min().orElse(0),maxX=values.stream().mapToInt(Report.Chunk::x).max().orElse(0),minZ=values.stream().mapToInt(Report.Chunk::z).min().orElse(0),maxZ=values.stream().mapToInt(Report.Chunk::z).max().orElse(0);centerX=((long)minX+maxX+1)/2.0;centerZ=((long)minZ+maxZ+1)/2.0;var area=viewport();cell=Math.max(2,Math.min(34,(int)Math.min(area.width()/Math.max(1L,(long)maxX-minX+3),area.height()/Math.max(1L,(long)maxZ-minZ+3))));zoomScroll=0;}

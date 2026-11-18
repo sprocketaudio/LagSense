@@ -49,6 +49,10 @@ final class ProfileLayoutChecks {
                     if(width>=640){var controls=pending.children().stream().filter(UiControlStrip.class::isInstance).map(UiControlStrip.class::cast).toList().getLast();check(controls.maximum()==0,"The complete pending call-path control row fits normal GUI scales without horizontal scrolling");}
                 }
                 var map=new HeatmapScreen(targets,report,true);map.width=width;map.height=height;map.profileNavigation=nav;map.init();layout(map,"Map");check((int)field(map,"mapTop")==120,"Map begins below the same two rows");
+                var mapFooter=widgets(map).stream().filter(w->w.getY()==map.footer()).sorted(Comparator.comparingInt(AbstractWidget::getX)).toList();
+                for(int i=1;i<mapFooter.size();i++)check(mapFooter.get(i-1).getRectangle().right()+4<=mapFooter.get(i).getX(),
+                    "Archived Map footer overlaps at width "+width+": "+
+                        mapFooter.stream().map(w->w.getMessage().getString()+" "+w.getX()+"+"+w.getWidth()).toList());
                 int sharedSearch=widgets(targets).stream().filter(UiInput.class::isInstance).findFirst().orElseThrow().getRectangle().width();
                 for(var page:List.of(chunks,tasks,events,paths,running,map))check(widgets(page).stream().filter(UiInput.class::isInstance).findFirst().orElseThrow().getRectangle().width()==sharedSearch,"Search has identical width across every tab and both call-path modes");
                 if(width>=640)check(sharedSearch>84,"Normal-width Search remains wider than the original field");

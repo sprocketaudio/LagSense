@@ -1,5 +1,6 @@
 package net.sprocketgames.lagsense.client;
 
+import com.mojang.blaze3d.platform.InputConstants;
 import net.sprocketgames.lagsense.ListScroll;
 import net.sprocketgames.lagsense.VirtualListIndex;
 import java.util.function.BiConsumer;
@@ -79,7 +80,7 @@ public final class UiScrollList extends AbstractContainerEventHandler implements
         scroll.move((int)Math.round(-vertical * 24)); position(); return true;
     }
     @Override public boolean mouseClicked(MouseButtonEvent e, boolean twice) {
-        if (e.button() == 0 && scroll.maximum() > 0 && isMouseOver(e.x(), e.y()) && e.x() >= left + width - 6) {
+        if (e.button() == InputConstants.MOUSE_BUTTON_LEFT && scroll.maximum() > 0 && isMouseOver(e.x(), e.y()) && e.x() >= left + width - 6) {
             draggingBar = true; dragBar(e.y()); return true;
         }
         return isMouseOver(e.x(),e.y()) && super.mouseClicked(e, twice);
